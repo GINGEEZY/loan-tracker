@@ -126,12 +126,21 @@ tr:hover td { background: #f9fafb; }
 .err-msg.show { display: block; }
 
 .help-box { margin-top: 12px; padding: 12px 14px; background: #f8fafc; border-radius: 10px; border: 1px solid var(--border); font-size: 0.82rem; color: var(--gray); line-height: 1.5; }
+
+.db-banner { padding: 10px 14px; border-radius: 10px; margin-bottom: 16px; font-size: 0.88rem; text-align: center; }
+.db-banner.ok { background: var(--success-light); color: var(--success); border: 1px solid var(--success); }
+.db-banner.err { background: var(--danger-light); color: #991b1b; border: 1px solid var(--danger); }
+.db-banner.loading { background: var(--primary-light); color: var(--primary); border: 1px solid var(--primary); }
+body.is-busy { cursor: wait; }
+body.is-busy .btn { pointer-events: none; opacity: 0.7; }
 </style>
 </head>
 <body>
 <div class="container">
 	<h2>Monthly Interest Loan Tracker</h2>
-	<p class="subtitle">10% monthly interest on principal · track repayments and balances</p>
+	<p class="subtitle">10% monthly interest on principal · saved to Supabase database</p>
+
+	<div id="dbBanner" class="db-banner loading">Connecting to database…</div>
 
 	<div class="summary-grid" id="summaryGrid"></div>
 
@@ -181,8 +190,8 @@ tr:hover td { background: #f9fafb; }
 			</div>
 			<div class="help-box">
 				<strong>Duration:</strong> Full calendar months from start date, then exact remaining days (e.g. 1 Jan → 8 Feb = <strong>1 month, 7 days</strong>).<br>
-				<strong>Interest:</strong> (Principal × 10% × full months) + (Principal × 10% × days ÷ 30). Same as Principal × 10% × (months + days÷30).
-				Data is saved automatically in this browser.
+				<strong>Interest:</strong> (Principal × 10% × full months) + (Principal × 10% × days ÷ 30).<br>
+				<strong>Storage:</strong> All borrowers and repayments are saved in your Supabase database via Vercel API routes.
 			</div>
 		</form>
 	</div>
@@ -199,6 +208,7 @@ tr:hover td { background: #f9fafb; }
 				<option value="pending">No payments yet</option>
 			</select>
 			<button type="button" class="btn btn-secondary btn-sm" id="exportBtn">Export JSON</button>
+			<button type="button" class="btn btn-secondary btn-sm" id="importLocalBtn" title="One-time import from old browser storage">Import browser data</button>
 		</div>
 		<div class="wrap-table">
 			<table>
@@ -267,24 +277,56 @@ tr:hover td { background: #f9fafb; }
 
 	const MONTHLY_RATE = 0.10;
 	const STORAGE_KEY = 'loanTrackerRecords_v1';
+	const API = '/api';
 
 	let records = [];
 	let repayTargetId = null;
+	let busy = false;
 
 	const $ = (id) => document.getElementById(id);
 
-	function loadRecords() {
-		try {
-			const raw = localStorage.getItem(STORAGE_KEY);
-			records = raw ? JSON.parse(raw) : [];
-			if (!Array.isArray(records)) records = [];
-		} catch {
-			records = [];
-		}
+	function setDbBanner(type, message) {
+		const el = $('dbBanner');
+		el.className = 'db-banner ' + type;
+		el.textContent = message;
+		el.style.display = message ? 'block' : 'none';
 	}
 
-	function saveRecords() {
-		localStorage.setItem(STORAGE_KEY, JSON.stringify(records));
+	function setBusy(on) {
+		busy = on;
+		document.body.classList.toggle('is-busy', on);
+	}
+
+	async function apiRequest(method, path, body) {
+		const opts = { method, headers: { 'Content-Type': 'application/json' } };
+		if (body !== undefined) opts.body = JSON.stringify(body);
+		const res = await fetch(API + path, opts);
+		let data = null;
+		try {
+			data = await res.json();
+		} catch {
+			data = null;
+		}
+		if (!res.ok) {
+			const msg = (data && data.error) ? data.error : res.statusText || 'Request failed';
+			throw new Error(msg);
+		}
+		return data;
+	}
+
+	async function loadRecords() {
+		setBusy(true);
+		setDbBanner('loading', 'Loading from database…');
+		try {
+			const data = await apiRequest('GET', '/loans');
+			records = Array.isArray(data) ? data : [];
+			setDbBanner('ok', 'Connected to database · ' + records.length + ' borrower(s)');
+		} catch (err) {
+			records = [];
+			setDbBanner('err', 'Database error: ' + err.message + ' — check Supabase env vars on Vercel.');
+		} finally {
+			setBusy(false);
+		}
 	}
 
 	function parseDate(str) {
@@ -397,10 +439,6 @@ tr:hover td { background: #f9fafb; }
 
 	function formatMoney(n) {
 		return (Number(n) || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-	}
-
-	function uid() {
-		return 'loan_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 8);
 	}
 
 	function updateFormPreview() {
@@ -604,14 +642,21 @@ tr:hover td { background: #f9fafb; }
 		window.scrollTo({ top: 0, behavior: 'smooth' });
 	}
 
-	function deleteRecord(id) {
+	async function deleteRecord(id) {
 		const r = records.find((x) => x.id === id);
 		if (!r) return;
 		if (!confirm(`Delete loan record for "${r.name}"? This cannot be undone.`)) return;
-		records = records.filter((x) => x.id !== id);
-		saveRecords();
-		if ($('editId').value === id) resetForm();
-		refresh();
+		setBusy(true);
+		try {
+			await apiRequest('DELETE', '/loans/' + encodeURIComponent(id));
+			if ($('editId').value === id) resetForm();
+			await loadRecords();
+			refresh();
+		} catch (err) {
+			alert('Delete failed: ' + err.message);
+		} finally {
+			setBusy(false);
+		}
 	}
 
 	function openRepayModal(id) {
@@ -659,18 +704,28 @@ tr:hover td { background: #f9fafb; }
 
 		body.querySelectorAll('[data-del-repay]').forEach((btn) => {
 			btn.addEventListener('click', () => {
-				const payId = btn.getAttribute('data-del-repay');
-				const r = records.find((x) => x.id === repayTargetId);
-				if (!r || !confirm('Remove this payment?')) return;
-				r.repayments = (r.repayments || []).filter((x) => x.id !== payId);
-				saveRecords();
-				openRepayModal(repayTargetId);
-				refresh();
+				removeRepayment(btn.getAttribute('data-del-repay'));
 			});
 		});
 	}
 
-	function addRepayment() {
+	async function removeRepayment(payId) {
+		const r = records.find((x) => x.id === repayTargetId);
+		if (!r || !confirm('Remove this payment?')) return;
+		setBusy(true);
+		try {
+			await apiRequest('DELETE', '/repayments/' + encodeURIComponent(payId));
+			await loadRecords();
+			openRepayModal(repayTargetId);
+			refresh();
+		} catch (err) {
+			alert('Remove payment failed: ' + err.message);
+		} finally {
+			setBusy(false);
+		}
+	}
+
+	async function addRepayment() {
 		const r = records.find((x) => x.id === repayTargetId);
 		if (!r) return;
 
@@ -700,21 +755,28 @@ tr:hover td { background: #f9fafb; }
 			return;
 		}
 
-		if (!r.repayments) r.repayments = [];
-		r.repayments.push({
-			id: 'pay_' + Date.now().toString(36),
-			amount,
-			date,
-			note
-		});
-		saveRecords();
-		err.classList.remove('show');
-		openRepayModal(repayTargetId);
-		refresh();
+		setBusy(true);
+		try {
+			await apiRequest('POST', '/loans/' + encodeURIComponent(repayTargetId) + '/repayments', {
+				amount,
+				date,
+				note
+			});
+			err.classList.remove('show');
+			await loadRecords();
+			openRepayModal(repayTargetId);
+			refresh();
+		} catch (apiErr) {
+			err.textContent = apiErr.message;
+			err.classList.add('show');
+		} finally {
+			setBusy(false);
+		}
 	}
 
-	$('loanForm').addEventListener('submit', (e) => {
+	$('loanForm').addEventListener('submit', async (e) => {
 		e.preventDefault();
+		if (busy) return;
 		const data = getFormData();
 		const err = validateFormData(data);
 		if (err) {
@@ -724,22 +786,21 @@ tr:hover td { background: #f9fafb; }
 		showFormError('');
 
 		const editId = $('editId').value;
-		if (editId) {
-			const idx = records.findIndex((x) => x.id === editId);
-			if (idx >= 0) {
-				records[idx] = { ...records[idx], ...data };
+		setBusy(true);
+		try {
+			if (editId) {
+				await apiRequest('PUT', '/loans/' + encodeURIComponent(editId), data);
+			} else {
+				await apiRequest('POST', '/loans', data);
 			}
-		} else {
-			records.push({
-				id: uid(),
-				...data,
-				repayments: [],
-				createdAt: new Date().toISOString()
-			});
+			resetForm();
+			await loadRecords();
+			refresh();
+		} catch (apiErr) {
+			showFormError(apiErr.message);
+		} finally {
+			setBusy(false);
 		}
-		saveRecords();
-		resetForm();
-		refresh();
 	});
 
 	['principal', 'startDate', 'endDate'].forEach((id) => {
@@ -769,9 +830,59 @@ tr:hover td { background: #f9fafb; }
 		URL.revokeObjectURL(a.href);
 	});
 
-	loadRecords();
-	updateFormPreview();
-	refresh();
+	$('importLocalBtn').addEventListener('click', async () => {
+		let old = [];
+		try {
+			const raw = localStorage.getItem(STORAGE_KEY);
+			old = raw ? JSON.parse(raw) : [];
+			if (!Array.isArray(old) || !old.length) {
+				alert('No old data found in this browser.');
+				return;
+			}
+		} catch {
+			alert('Could not read old browser data.');
+			return;
+		}
+		if (!confirm('Import ' + old.length + ' record(s) from browser storage into the database?')) return;
+		setBusy(true);
+		let imported = 0;
+		try {
+			for (const r of old) {
+				const loan = await apiRequest('POST', '/loans', {
+					name: r.name,
+					phone: r.phone,
+					principal: r.principal,
+					startDate: r.startDate,
+					endDate: r.endDate,
+					notes: r.notes
+				});
+				for (const p of r.repayments || []) {
+					await apiRequest('POST', '/loans/' + encodeURIComponent(loan.id) + '/repayments', {
+						amount: p.amount,
+						date: p.date,
+						note: p.note
+					});
+				}
+				imported += 1;
+			}
+			localStorage.removeItem(STORAGE_KEY);
+			await loadRecords();
+			refresh();
+			alert('Imported ' + imported + ' borrower(s) into the database.');
+		} catch (err) {
+			alert('Import stopped: ' + err.message);
+			await loadRecords();
+			refresh();
+		} finally {
+			setBusy(false);
+		}
+	});
+
+	(async function init() {
+		updateFormPreview();
+		await loadRecords();
+		refresh();
+	})();
 })();
 </script>
 </body>
