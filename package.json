@@ -1,0 +1,9 @@
+{
+  "name": "loan-tracker",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Monthly interest loan tracker (static site)",
+  "scripts": {
+    "sync": "powershell -NoProfile -Command \"Copy-Item -Path '../loan-tracker.html' -Destination './index.html' -Force\""
+  }
+}

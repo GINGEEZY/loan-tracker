@@ -1,0 +1,778 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Monthly Interest Loan Tracker</title>
+<style>
+:root {
+	--primary: #2563eb;
+	--primary-light: #dbeafe;
+	--success: #16a34a;
+	--success-light: #dcfce7;
+	--danger: #dc2626;
+	--danger-light: #fee2e2;
+	--warning: #ea580c;
+	--warning-light: #ffedd5;
+	--gray: #6b7280;
+	--gray-light: #f3f4f6;
+	--text: #1f2937;
+	--border: #e5e7eb;
+	--shadow: 0 4px 6px -1px rgba(0,0,0,0.1), 0 2px 4px -1px rgba(0,0,0,0.06);
+}
+* { box-sizing: border-box; }
+body { font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%); padding: 20px; min-height: 100vh; color: var(--text); }
+.container { max-width: min(1600px, 100%); margin: 0 auto; }
+h2 { text-align: center; font-size: 1.75rem; color: var(--primary); margin-bottom: 8px; font-weight: 700; }
+.subtitle { text-align: center; color: var(--gray); font-size: 0.95rem; margin-bottom: 24px; }
+
+.card { background: #fff; padding: 24px; border-radius: 16px; box-shadow: var(--shadow); margin-bottom: 20px; border: 1px solid var(--border); }
+.card h3 { margin: 0 0 16px 0; font-size: 1.1rem; color: var(--primary); display: flex; align-items: center; gap: 8px; }
+.card h3::before { content: ''; width: 4px; height: 24px; background: var(--primary); border-radius: 2px; }
+
+.summary-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 14px; margin-bottom: 20px; }
+.summary-tile { background: #fff; padding: 16px 18px; border-radius: 14px; border: 1px solid var(--border); box-shadow: var(--shadow); }
+.summary-tile .label { font-size: 0.78rem; font-weight: 600; color: var(--gray); text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 6px; }
+.summary-tile .value { font-size: 1.35rem; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--text); }
+.summary-tile.highlight .value { color: var(--primary); }
+.summary-tile.success .value { color: var(--success); }
+.summary-tile.danger .value { color: var(--danger); }
+
+.form-grid {
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+	gap: 14px 16px;
+	align-items: end;
+}
+.form-grid label { display: block; font-size: 0.78rem; font-weight: 600; color: var(--gray); text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 4px; }
+.form-grid input, .form-grid textarea {
+	width: 100%;
+	padding: 10px 12px;
+	border: 2px solid var(--border);
+	border-radius: 10px;
+	font-size: 0.95rem;
+	font-family: inherit;
+}
+.form-grid input:focus, .form-grid textarea:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px var(--primary-light); }
+.form-grid .span-2 { grid-column: span 2; }
+@media (max-width: 520px) { .form-grid .span-2 { grid-column: span 1; } }
+
+.preview-box {
+	margin-top: 14px;
+	padding: 14px 16px;
+	background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%);
+	border: 1px solid var(--primary-light);
+	border-radius: 12px;
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+	gap: 10px 16px;
+	font-size: 0.9rem;
+}
+.preview-box .pv-label { color: var(--gray); font-size: 0.75rem; font-weight: 600; text-transform: uppercase; }
+.preview-box .pv-value { font-weight: 700; font-variant-numeric: tabular-nums; }
+
+.btn-row { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 16px; }
+.btn { padding: 10px 18px; border: none; border-radius: 10px; cursor: pointer; font-weight: 600; font-size: 0.9rem; transition: all 0.2s; font-family: inherit; }
+.btn-primary { background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%); color: #fff; }
+.btn-primary:hover { box-shadow: 0 4px 12px rgba(37, 99, 235, 0.35); }
+.btn-secondary { background: var(--gray-light); color: var(--text); }
+.btn-secondary:hover { background: #e5e7eb; }
+.btn-danger { background: var(--danger-light); color: var(--danger); }
+.btn-danger:hover { background: #fecaca; }
+.btn-sm { padding: 6px 12px; font-size: 0.8rem; }
+.btn-success { background: var(--success-light); color: var(--success); }
+.btn-success:hover { background: #bbf7d0; }
+
+.filter-row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-bottom: 14px; }
+.filter-row input[type="search"] {
+	flex: 1;
+	min-width: 200px;
+	padding: 10px 12px;
+	border: 2px solid var(--border);
+	border-radius: 10px;
+	font-size: 0.9rem;
+}
+.filter-row input:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px var(--primary-light); }
+
+.wrap-table { overflow-x: auto; border-radius: 10px; border: 1px solid var(--border); }
+table { width: 100%; border-collapse: collapse; font-size: 0.85rem; min-width: 1100px; }
+th, td { padding: 10px 10px; text-align: left; border-bottom: 1px solid var(--border); }
+th { background: var(--gray-light); font-weight: 600; color: var(--text); font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.4px; position: sticky; top: 0; z-index: 1; }
+tr:hover td { background: #f9fafb; }
+.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.actions { white-space: nowrap; display: flex; gap: 6px; flex-wrap: wrap; }
+
+.badge { display: inline-block; padding: 3px 10px; border-radius: 999px; font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em; }
+.badge-paid { background: var(--success-light); color: var(--success); }
+.badge-partial { background: var(--warning-light); color: var(--warning); }
+.badge-overdue { background: var(--danger-light); color: var(--danger); }
+.badge-pending { background: var(--primary-light); color: var(--primary); }
+
+.empty-state { text-align: center; padding: 40px 20px; color: var(--gray); }
+.empty-state p { margin: 8px 0 0; }
+
+.modal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.55); backdrop-filter: blur(4px); z-index: 1000; align-items: center; justify-content: center; padding: 20px; }
+.modal.show { display: flex; }
+.modal-content { background: #fff; border-radius: 16px; padding: 24px; width: 100%; max-width: 520px; max-height: 90vh; overflow-y: auto; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.25); }
+.modal-content h3 { margin: 0 0 16px; color: var(--primary); }
+.modal-close { float: right; border: none; background: transparent; font-size: 1.5rem; cursor: pointer; color: var(--gray); line-height: 1; padding: 0 4px; }
+.modal-close:hover { color: var(--danger); }
+
+.repay-history { margin-top: 12px; max-height: 200px; overflow-y: auto; border: 1px solid var(--border); border-radius: 10px; }
+.repay-history table { min-width: 0; font-size: 0.82rem; }
+.repay-history th, .repay-history td { padding: 8px 10px; }
+
+.err-msg { color: var(--danger); font-size: 0.85rem; margin-top: 8px; display: none; }
+.err-msg.show { display: block; }
+
+.help-box { margin-top: 12px; padding: 12px 14px; background: #f8fafc; border-radius: 10px; border: 1px solid var(--border); font-size: 0.82rem; color: var(--gray); line-height: 1.5; }
+</style>
+</head>
+<body>
+<div class="container">
+	<h2>Monthly Interest Loan Tracker</h2>
+	<p class="subtitle">10% monthly interest on principal · track repayments and balances</p>
+
+	<div class="summary-grid" id="summaryGrid"></div>
+
+	<div class="card">
+		<h3 id="formTitle">Add borrower</h3>
+		<form id="loanForm" autocomplete="off">
+			<input type="hidden" id="editId" value="">
+			<div class="form-grid">
+				<div>
+					<label for="borrowerName">Borrower name *</label>
+					<input type="text" id="borrowerName" required placeholder="Full name">
+				</div>
+				<div>
+					<label for="borrowerPhone">Phone / contact</label>
+					<input type="text" id="borrowerPhone" placeholder="Optional">
+				</div>
+				<div>
+					<label for="principal">Principal amount *</label>
+					<input type="number" id="principal" required min="0.01" step="0.01" placeholder="0.00">
+				</div>
+				<div>
+					<label for="startDate">Start date *</label>
+					<input type="date" id="startDate" required>
+				</div>
+				<div>
+					<label for="endDate">End date *</label>
+					<input type="date" id="endDate" required>
+				</div>
+				<div class="span-2">
+					<label for="notes">Notes</label>
+					<input type="text" id="notes" placeholder="Optional remarks">
+				</div>
+			</div>
+			<div class="preview-box" id="calcPreview">
+				<div><div class="pv-label">Duration</div><div class="pv-value" id="pvDuration">—</div></div>
+				<div><div class="pv-label">Interest periods</div><div class="pv-value" id="pvEquiv" title="Full months plus days ÷ 30">—</div></div>
+				<div><div class="pv-label">Rate</div><div class="pv-value">10% / month</div></div>
+				<div><div class="pv-label">Interest breakdown</div><div class="pv-value" id="pvInterestBreakdown" style="font-size:0.82rem;font-weight:600">—</div></div>
+				<div><div class="pv-label">Total interest</div><div class="pv-value" id="pvInterest">—</div></div>
+				<div><div class="pv-label">Total payable</div><div class="pv-value" id="pvPayable">—</div></div>
+			</div>
+			<p class="err-msg" id="formError"></p>
+			<div class="btn-row">
+				<button type="submit" class="btn btn-primary" id="submitBtn">Save borrower</button>
+				<button type="button" class="btn btn-secondary" id="cancelEditBtn" style="display:none">Cancel edit</button>
+				<button type="reset" class="btn btn-secondary" id="resetFormBtn">Clear form</button>
+			</div>
+			<div class="help-box">
+				<strong>Duration:</strong> Full calendar months from start date, then exact remaining days (e.g. 1 Jan → 8 Feb = <strong>1 month, 7 days</strong>).<br>
+				<strong>Interest:</strong> (Principal × 10% × full months) + (Principal × 10% × days ÷ 30). Same as Principal × 10% × (months + days÷30).
+				Data is saved automatically in this browser.
+			</div>
+		</form>
+	</div>
+
+	<div class="card">
+		<h3>All borrowers</h3>
+		<div class="filter-row">
+			<input type="search" id="searchInput" placeholder="Search by name, phone, or notes…">
+			<select id="statusFilter">
+				<option value="">All statuses</option>
+				<option value="paid">Paid in full</option>
+				<option value="partial">Partially paid</option>
+				<option value="overdue">Overdue</option>
+				<option value="pending">No payments yet</option>
+			</select>
+			<button type="button" class="btn btn-secondary btn-sm" id="exportBtn">Export JSON</button>
+		</div>
+		<div class="wrap-table">
+			<table>
+				<thead>
+					<tr>
+						<th>Borrower</th>
+						<th>Contact</th>
+						<th class="num">Principal</th>
+						<th>Start</th>
+						<th>End</th>
+						<th>Duration</th>
+						<th class="num">Interest (10%)</th>
+						<th class="num">Total payable</th>
+						<th class="num">Paid</th>
+						<th class="num">Balance</th>
+						<th>Status</th>
+						<th>Actions</th>
+					</tr>
+				</thead>
+				<tbody id="loanTableBody"></tbody>
+			</table>
+		</div>
+		<div class="empty-state" id="emptyState" style="display:none">
+			<strong>No borrowers yet</strong>
+			<p>Add a borrower using the form above.</p>
+		</div>
+	</div>
+</div>
+
+<div class="modal" id="repayModal" aria-hidden="true">
+	<div class="modal-content">
+		<button type="button" class="modal-close" id="closeRepayModal" aria-label="Close">&times;</button>
+		<h3>Record repayment</h3>
+		<p id="repayBorrowerLabel" style="margin:0 0 12px;color:var(--gray);font-size:0.9rem"></p>
+		<div class="form-grid">
+			<div>
+				<label for="repayAmount">Amount *</label>
+				<input type="number" id="repayAmount" min="0.01" step="0.01" required>
+			</div>
+			<div>
+				<label for="repayDate">Payment date *</label>
+				<input type="date" id="repayDate" required>
+			</div>
+			<div class="span-2">
+				<label for="repayNote">Note</label>
+				<input type="text" id="repayNote" placeholder="Optional">
+			</div>
+		</div>
+		<p style="margin:12px 0 4px;font-size:0.85rem"><strong>Remaining balance:</strong> <span id="repayBalanceHint">—</span></p>
+		<p class="err-msg" id="repayError"></p>
+		<div class="btn-row">
+			<button type="button" class="btn btn-primary" id="saveRepayBtn">Add payment</button>
+		</div>
+		<div class="repay-history" id="repayHistoryWrap" style="display:none">
+			<table>
+				<thead><tr><th>Date</th><th class="num">Amount</th><th>Note</th><th></th></tr></thead>
+				<tbody id="repayHistoryBody"></tbody>
+			</table>
+		</div>
+	</div>
+</div>
+
+<script>
+(function () {
+	'use strict';
+
+	const MONTHLY_RATE = 0.10;
+	const STORAGE_KEY = 'loanTrackerRecords_v1';
+
+	let records = [];
+	let repayTargetId = null;
+
+	const $ = (id) => document.getElementById(id);
+
+	function loadRecords() {
+		try {
+			const raw = localStorage.getItem(STORAGE_KEY);
+			records = raw ? JSON.parse(raw) : [];
+			if (!Array.isArray(records)) records = [];
+		} catch {
+			records = [];
+		}
+	}
+
+	function saveRecords() {
+		localStorage.setItem(STORAGE_KEY, JSON.stringify(records));
+	}
+
+	function parseDate(str) {
+		if (!str) return null;
+		const d = new Date(str + 'T00:00:00');
+		return Number.isNaN(d.getTime()) ? null : d;
+	}
+
+	function formatDate(str) {
+		const d = parseDate(str);
+		if (!d) return '—';
+		return d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+	}
+
+	const DAYS_PER_MONTH = 30;
+
+	function durationExact(startStr, endStr) {
+		const start = parseDate(startStr);
+		const end = parseDate(endStr);
+		if (!start || !end || end < start) {
+			return { months: 0, days: 0, valid: false };
+		}
+
+		let months = 0;
+		let cursor = new Date(start.getTime());
+
+		while (true) {
+			const nextMonth = new Date(cursor.getTime());
+			nextMonth.setMonth(nextMonth.getMonth() + 1);
+			if (nextMonth.getTime() <= end.getTime()) {
+				months += 1;
+				cursor = nextMonth;
+			} else {
+				break;
+			}
+		}
+
+		const msPerDay = 24 * 60 * 60 * 1000;
+		const days = Math.round((end.getTime() - cursor.getTime()) / msPerDay);
+		return { months, days, valid: true };
+	}
+
+	function formatDuration(months, days) {
+		const parts = [];
+		if (months === 1) parts.push('1 month');
+		else if (months > 0) parts.push(months + ' months');
+		if (days === 1) parts.push('1 day');
+		else if (days > 0) parts.push(days + ' days');
+		if (!parts.length) return '0 days';
+		return parts.join(', ');
+	}
+
+	function calcLoan(principal, startDate, endDate) {
+		const p = Number(principal) || 0;
+		const dur = durationExact(startDate, endDate);
+
+		if (!dur.valid) {
+			return {
+				months: 0,
+				days: 0,
+				interestMonths: 0,
+				monthInterest: 0,
+				dayInterest: 0,
+				interest: 0,
+				payable: p,
+				durationLabel: '—'
+			};
+		}
+
+		const interestMonths = dur.months + dur.days / DAYS_PER_MONTH;
+		const monthInterest = p * MONTHLY_RATE * dur.months;
+		const dayInterest = p * MONTHLY_RATE * (dur.days / DAYS_PER_MONTH);
+		const interest = monthInterest + dayInterest;
+		const payable = p + interest;
+
+		return {
+			months: dur.months,
+			days: dur.days,
+			interestMonths,
+			monthInterest,
+			dayInterest,
+			interest,
+			payable,
+			durationLabel: formatDuration(dur.months, dur.days)
+		};
+	}
+
+	function totalPaid(record) {
+		return (record.repayments || []).reduce((sum, r) => sum + (Number(r.amount) || 0), 0);
+	}
+
+	function getStatus(record) {
+		const { payable } = calcLoan(record.principal, record.startDate, record.endDate);
+		const paid = totalPaid(record);
+		const balance = Math.max(0, payable - paid);
+		const end = parseDate(record.endDate);
+		const today = new Date();
+		today.setHours(0, 0, 0, 0);
+
+		if (balance <= 0.005) return 'paid';
+		if (end && end < today) return 'overdue';
+		if (paid > 0) return 'partial';
+		return 'pending';
+	}
+
+	function statusLabel(status) {
+		const map = { paid: 'Paid', partial: 'Partial', overdue: 'Overdue', pending: 'Pending' };
+		return map[status] || status;
+	}
+
+	function formatMoney(n) {
+		return (Number(n) || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+	}
+
+	function uid() {
+		return 'loan_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 8);
+	}
+
+	function updateFormPreview() {
+		const principal = $('principal').value;
+		const start = $('startDate').value;
+		const end = $('endDate').value;
+		if (!principal || !start || !end) {
+			$('pvDuration').textContent = '—';
+			$('pvEquiv').textContent = '—';
+			$('pvInterestBreakdown').textContent = '—';
+			$('pvInterest').textContent = '—';
+			$('pvPayable').textContent = '—';
+			return;
+		}
+		const calc = calcLoan(principal, start, end);
+		const p = Number(principal) || 0;
+		$('pvDuration').textContent = calc.durationLabel;
+		$('pvEquiv').textContent = calc.interestMonths.toFixed(4).replace(/\.?0+$/, '') + ' mo';
+		if (calc.months === 0 && calc.days === 0) {
+			$('pvInterestBreakdown').textContent = 'No interest (0 days)';
+		} else {
+			const parts = [];
+			if (calc.months > 0) parts.push(formatMoney(calc.monthInterest) + ' (' + calc.months + ' mo)');
+			if (calc.days > 0) parts.push(formatMoney(calc.dayInterest) + ' (' + calc.days + ' d)');
+			$('pvInterestBreakdown').textContent = parts.join(' + ');
+		}
+		$('pvInterest').textContent = formatMoney(calc.interest);
+		$('pvPayable').textContent = formatMoney(calc.payable);
+	}
+
+	function showFormError(msg) {
+		const el = $('formError');
+		if (msg) {
+			el.textContent = msg;
+			el.classList.add('show');
+		} else {
+			el.textContent = '';
+			el.classList.remove('show');
+		}
+	}
+
+	function resetForm() {
+		$('loanForm').reset();
+		$('editId').value = '';
+		$('formTitle').textContent = 'Add borrower';
+		$('submitBtn').textContent = 'Save borrower';
+		$('cancelEditBtn').style.display = 'none';
+		showFormError('');
+		updateFormPreview();
+	}
+
+	function renderSummary() {
+		let totalPrincipal = 0;
+		let totalInterest = 0;
+		let totalPayable = 0;
+		let totalPaidSum = 0;
+		let totalBalance = 0;
+		let overdueCount = 0;
+
+		records.forEach((r) => {
+			const calc = calcLoan(r.principal, r.startDate, r.endDate);
+			const paid = totalPaid(r);
+			const balance = Math.max(0, calc.payable - paid);
+			totalPrincipal += Number(r.principal) || 0;
+			totalInterest += calc.interest;
+			totalPayable += calc.payable;
+			totalPaidSum += paid;
+			totalBalance += balance;
+			if (getStatus(r) === 'overdue') overdueCount += 1;
+		});
+
+		$('summaryGrid').innerHTML = [
+			tile('Borrowers', records.length, ''),
+			tile('Total principal', formatMoney(totalPrincipal), ''),
+			tile('Total interest', formatMoney(totalInterest), 'highlight'),
+			tile('Total payable', formatMoney(totalPayable), 'highlight'),
+			tile('Total collected', formatMoney(totalPaidSum), 'success'),
+			tile('Outstanding balance', formatMoney(totalBalance), totalBalance > 0 ? 'danger' : 'success'),
+			tile('Overdue loans', overdueCount, overdueCount > 0 ? 'danger' : '')
+		].join('');
+	}
+
+	function tile(label, value, extraClass) {
+		return `<div class="summary-tile ${extraClass}"><div class="label">${label}</div><div class="value">${value}</div></div>`;
+	}
+
+	function filteredRecords() {
+		const q = ($('searchInput').value || '').trim().toLowerCase();
+		const status = $('statusFilter').value;
+		return records.filter((r) => {
+			if (status && getStatus(r) !== status) return false;
+			if (!q) return true;
+			const hay = [r.name, r.phone, r.notes].filter(Boolean).join(' ').toLowerCase();
+			return hay.includes(q);
+		});
+	}
+
+	function renderTable() {
+		const list = filteredRecords();
+		const tbody = $('loanTableBody');
+		const empty = $('emptyState');
+
+		if (records.length === 0) {
+			tbody.innerHTML = '';
+			empty.style.display = 'block';
+			document.querySelector('.wrap-table table').style.display = 'none';
+			return;
+		}
+
+		empty.style.display = list.length === 0 ? 'block' : 'none';
+		document.querySelector('.wrap-table table').style.display = '';
+
+		if (list.length === 0) {
+			tbody.innerHTML = '<tr><td colspan="12" style="text-align:center;color:var(--gray);padding:24px">No records match your filters.</td></tr>';
+			return;
+		}
+
+		tbody.innerHTML = list.map((r) => {
+			const calc = calcLoan(r.principal, r.startDate, r.endDate);
+			const paid = totalPaid(r);
+			const balance = Math.max(0, calc.payable - paid);
+			const status = getStatus(r);
+			return `<tr>
+				<td><strong>${escapeHtml(r.name)}</strong>${r.notes ? `<br><span style="font-size:0.78rem;color:var(--gray)">${escapeHtml(r.notes)}</span>` : ''}</td>
+				<td>${escapeHtml(r.phone || '—')}</td>
+				<td class="num">${formatMoney(r.principal)}</td>
+				<td>${formatDate(r.startDate)}</td>
+				<td>${formatDate(r.endDate)}</td>
+				<td>${escapeHtml(calc.durationLabel)}<br><span style="font-size:0.75rem;color:var(--gray)">${calc.interestMonths.toFixed(2)} mo @ 10%</span></td>
+				<td class="num">${formatMoney(calc.interest)}</td>
+				<td class="num">${formatMoney(calc.payable)}</td>
+				<td class="num">${formatMoney(paid)}</td>
+				<td class="num">${formatMoney(balance)}</td>
+				<td><span class="badge badge-${status}">${statusLabel(status)}</span></td>
+				<td class="actions">
+					<button type="button" class="btn btn-success btn-sm" data-repay="${r.id}">Repay</button>
+					<button type="button" class="btn btn-secondary btn-sm" data-edit="${r.id}">Edit</button>
+					<button type="button" class="btn btn-danger btn-sm" data-delete="${r.id}">Delete</button>
+				</td>
+			</tr>`;
+		}).join('');
+
+		tbody.querySelectorAll('[data-repay]').forEach((btn) => {
+			btn.addEventListener('click', () => openRepayModal(btn.getAttribute('data-repay')));
+		});
+		tbody.querySelectorAll('[data-edit]').forEach((btn) => {
+			btn.addEventListener('click', () => startEdit(btn.getAttribute('data-edit')));
+		});
+		tbody.querySelectorAll('[data-delete]').forEach((btn) => {
+			btn.addEventListener('click', () => deleteRecord(btn.getAttribute('data-delete')));
+		});
+	}
+
+	function escapeHtml(s) {
+		return String(s)
+			.replace(/&/g, '&amp;')
+			.replace(/</g, '&lt;')
+			.replace(/>/g, '&gt;')
+			.replace(/"/g, '&quot;');
+	}
+
+	function refresh() {
+		renderSummary();
+		renderTable();
+	}
+
+	function validateFormData(data) {
+		if (!data.name.trim()) return 'Borrower name is required.';
+		if (!data.principal || data.principal <= 0) return 'Principal must be greater than zero.';
+		if (!data.startDate || !data.endDate) return 'Start and end dates are required.';
+		if (parseDate(data.endDate) < parseDate(data.startDate)) return 'End date cannot be before start date.';
+		return '';
+	}
+
+	function getFormData() {
+		return {
+			name: $('borrowerName').value.trim(),
+			phone: $('borrowerPhone').value.trim(),
+			principal: Number($('principal').value),
+			startDate: $('startDate').value,
+			endDate: $('endDate').value,
+			notes: $('notes').value.trim()
+		};
+	}
+
+	function startEdit(id) {
+		const r = records.find((x) => x.id === id);
+		if (!r) return;
+		$('editId').value = r.id;
+		$('borrowerName').value = r.name;
+		$('borrowerPhone').value = r.phone || '';
+		$('principal').value = r.principal;
+		$('startDate').value = r.startDate;
+		$('endDate').value = r.endDate;
+		$('notes').value = r.notes || '';
+		$('formTitle').textContent = 'Edit borrower';
+		$('submitBtn').textContent = 'Update borrower';
+		$('cancelEditBtn').style.display = '';
+		showFormError('');
+		updateFormPreview();
+		window.scrollTo({ top: 0, behavior: 'smooth' });
+	}
+
+	function deleteRecord(id) {
+		const r = records.find((x) => x.id === id);
+		if (!r) return;
+		if (!confirm(`Delete loan record for "${r.name}"? This cannot be undone.`)) return;
+		records = records.filter((x) => x.id !== id);
+		saveRecords();
+		if ($('editId').value === id) resetForm();
+		refresh();
+	}
+
+	function openRepayModal(id) {
+		const r = records.find((x) => x.id === id);
+		if (!r) return;
+		repayTargetId = id;
+		const calc = calcLoan(r.principal, r.startDate, r.endDate);
+		const paid = totalPaid(r);
+		const balance = Math.max(0, calc.payable - paid);
+
+		$('repayBorrowerLabel').textContent = `${r.name} · Total payable ${formatMoney(calc.payable)} · Paid ${formatMoney(paid)}`;
+		$('repayBalanceHint').textContent = formatMoney(balance);
+		$('repayAmount').value = balance > 0 ? balance.toFixed(2) : '';
+		$('repayDate').value = new Date().toISOString().slice(0, 10);
+		$('repayNote').value = '';
+		$('repayError').classList.remove('show');
+
+		renderRepayHistory(r);
+		$('repayModal').classList.add('show');
+	}
+
+	function closeRepayModal() {
+		$('repayModal').classList.remove('show');
+		repayTargetId = null;
+	}
+
+	function renderRepayHistory(record) {
+		const payments = [...(record.repayments || [])].sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+		const wrap = $('repayHistoryWrap');
+		const body = $('repayHistoryBody');
+
+		if (!payments.length) {
+			wrap.style.display = 'none';
+			body.innerHTML = '';
+			return;
+		}
+
+		wrap.style.display = 'block';
+		body.innerHTML = payments.map((p) => `<tr>
+			<td>${formatDate(p.date)}</td>
+			<td class="num">${formatMoney(p.amount)}</td>
+			<td>${escapeHtml(p.note || '—')}</td>
+			<td><button type="button" class="btn btn-danger btn-sm" data-del-repay="${p.id}">Remove</button></td>
+		</tr>`).join('');
+
+		body.querySelectorAll('[data-del-repay]').forEach((btn) => {
+			btn.addEventListener('click', () => {
+				const payId = btn.getAttribute('data-del-repay');
+				const r = records.find((x) => x.id === repayTargetId);
+				if (!r || !confirm('Remove this payment?')) return;
+				r.repayments = (r.repayments || []).filter((x) => x.id !== payId);
+				saveRecords();
+				openRepayModal(repayTargetId);
+				refresh();
+			});
+		});
+	}
+
+	function addRepayment() {
+		const r = records.find((x) => x.id === repayTargetId);
+		if (!r) return;
+
+		const amount = Number($('repayAmount').value);
+		const date = $('repayDate').value;
+		const note = $('repayNote').value.trim();
+		const err = $('repayError');
+
+		if (!amount || amount <= 0) {
+			err.textContent = 'Enter a valid payment amount.';
+			err.classList.add('show');
+			return;
+		}
+		if (!date) {
+			err.textContent = 'Payment date is required.';
+			err.classList.add('show');
+			return;
+		}
+
+		const calc = calcLoan(r.principal, r.startDate, r.endDate);
+		const paid = totalPaid(r);
+		const balance = calc.payable - paid;
+
+		if (amount > balance + 0.01) {
+			err.textContent = `Payment exceeds remaining balance (${formatMoney(balance)}).`;
+			err.classList.add('show');
+			return;
+		}
+
+		if (!r.repayments) r.repayments = [];
+		r.repayments.push({
+			id: 'pay_' + Date.now().toString(36),
+			amount,
+			date,
+			note
+		});
+		saveRecords();
+		err.classList.remove('show');
+		openRepayModal(repayTargetId);
+		refresh();
+	}
+
+	$('loanForm').addEventListener('submit', (e) => {
+		e.preventDefault();
+		const data = getFormData();
+		const err = validateFormData(data);
+		if (err) {
+			showFormError(err);
+			return;
+		}
+		showFormError('');
+
+		const editId = $('editId').value;
+		if (editId) {
+			const idx = records.findIndex((x) => x.id === editId);
+			if (idx >= 0) {
+				records[idx] = { ...records[idx], ...data };
+			}
+		} else {
+			records.push({
+				id: uid(),
+				...data,
+				repayments: [],
+				createdAt: new Date().toISOString()
+			});
+		}
+		saveRecords();
+		resetForm();
+		refresh();
+	});
+
+	['principal', 'startDate', 'endDate'].forEach((id) => {
+		$(id).addEventListener('input', updateFormPreview);
+		$(id).addEventListener('change', updateFormPreview);
+	});
+
+	$('cancelEditBtn').addEventListener('click', resetForm);
+	$('resetFormBtn').addEventListener('click', () => {
+		setTimeout(resetForm, 0);
+	});
+	$('searchInput').addEventListener('input', renderTable);
+	$('statusFilter').addEventListener('change', renderTable);
+
+	$('closeRepayModal').addEventListener('click', closeRepayModal);
+	$('repayModal').addEventListener('click', (e) => {
+		if (e.target === $('repayModal')) closeRepayModal();
+	});
+	$('saveRepayBtn').addEventListener('click', addRepayment);
+
+	$('exportBtn').addEventListener('click', () => {
+		const blob = new Blob([JSON.stringify(records, null, 2)], { type: 'application/json' });
+		const a = document.createElement('a');
+		a.href = URL.createObjectURL(blob);
+		a.download = 'loan-tracker-export-' + new Date().toISOString().slice(0, 10) + '.json';
+		a.click();
+		URL.revokeObjectURL(a.href);
+	});
+
+	loadRecords();
+	updateFormPreview();
+	refresh();
+})();
+</script>
+</body>
+</html>
