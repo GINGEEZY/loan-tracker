@@ -22,6 +22,15 @@ create table if not exists public.repayments (
 
 create index if not exists repayments_loan_id_idx on public.repayments (loan_id);
 
--- RLS on: only server API (service_role key) can read/write. Do not expose service_role in the browser.
 alter table public.loans enable row level security;
 alter table public.repayments enable row level security;
+
+-- Allow the public anon key (used by the web app). For a private app, add Supabase Auth later.
+drop policy if exists "anon_all_loans" on public.loans;
+drop policy if exists "anon_all_repayments" on public.repayments;
+
+create policy "anon_all_loans"
+	on public.loans for all to anon using (true) with check (true);
+
+create policy "anon_all_repayments"
+	on public.repayments for all to anon using (true) with check (true);

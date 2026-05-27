@@ -5,9 +5,7 @@
   "description": "Monthly interest loan tracker with Supabase database",
   "scripts": {
     "sync": "powershell -NoProfile -Command \"Copy-Item -Path '../loan-tracker.html' -Destination './index.html' -Force\"",
+    "build": "node scripts/generate-config.js",
     "dev": "vercel dev"
-  },
-  "dependencies": {
-    "@supabase/supabase-js": "^2.49.1"
   }
 }

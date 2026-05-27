@@ -271,17 +271,19 @@ body.is-busy .btn { pointer-events: none; opacity: 0.7; }
 	</div>
 </div>
 
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="config.js"></script>
 <script>
 (function () {
 	'use strict';
 
 	const MONTHLY_RATE = 0.10;
 	const STORAGE_KEY = 'loanTrackerRecords_v1';
-	const API = '/api';
 
 	let records = [];
 	let repayTargetId = null;
 	let busy = false;
+	let supabase = null;
 
 	const $ = (id) => document.getElementById(id);
 
@@ -297,36 +299,122 @@ body.is-busy .btn { pointer-events: none; opacity: 0.7; }
 		document.body.classList.toggle('is-busy', on);
 	}
 
-	async function apiRequest(method, path, body) {
-		const opts = { method, headers: { 'Content-Type': 'application/json' } };
-		if (body !== undefined) opts.body = JSON.stringify(body);
-		const res = await fetch(API + path, opts);
-		let data = null;
-		try {
-			data = await res.json();
-		} catch {
-			data = null;
+	function newId(prefix) {
+		return prefix + '_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 8);
+	}
+
+	function getSupabase() {
+		if (supabase) return supabase;
+		const cfg = window.SUPABASE_CONFIG;
+		if (!cfg || !cfg.url || !cfg.anonKey) {
+			throw new Error('Supabase not configured. Set SUPABASE_URL and SUPABASE_ANON_KEY on Vercel, then redeploy.');
 		}
-		if (!res.ok) {
-			const msg = (data && data.error) ? data.error : res.statusText || 'Request failed';
-			throw new Error(msg);
+		supabase = window.supabase.createClient(cfg.url, cfg.anonKey);
+		return supabase;
+	}
+
+	function rowsToRecords(loans, repayments) {
+		const byLoan = {};
+		for (const r of repayments || []) {
+			if (!byLoan[r.loan_id]) byLoan[r.loan_id] = [];
+			byLoan[r.loan_id].push({
+				id: r.id,
+				amount: Number(r.amount),
+				date: r.payment_date,
+				note: r.note || ''
+			});
 		}
-		return data;
+		return (loans || []).map((loan) => ({
+			id: loan.id,
+			name: loan.name,
+			phone: loan.phone || '',
+			principal: Number(loan.principal),
+			startDate: loan.start_date,
+			endDate: loan.end_date,
+			notes: loan.notes || '',
+			createdAt: loan.created_at,
+			repayments: byLoan[loan.id] || []
+		}));
 	}
 
 	async function loadRecords() {
 		setBusy(true);
 		setDbBanner('loading', 'Loading from database…');
 		try {
-			const data = await apiRequest('GET', '/loans');
-			records = Array.isArray(data) ? data : [];
-			setDbBanner('ok', 'Connected to database · ' + records.length + ' borrower(s)');
+			const db = getSupabase();
+			const { data: loans, error: loanErr } = await db
+				.from('loans')
+				.select('*')
+				.order('created_at', { ascending: false });
+			if (loanErr) throw loanErr;
+
+			const { data: reps, error: repErr } = await db.from('repayments').select('*');
+			if (repErr) throw repErr;
+
+			records = rowsToRecords(loans || [], reps || []);
+			setDbBanner('ok', 'Connected to Supabase · ' + records.length + ' borrower(s)');
 		} catch (err) {
 			records = [];
-			setDbBanner('err', 'Database error: ' + err.message + ' — check Supabase env vars on Vercel.');
+			setDbBanner('err', 'Database error: ' + err.message);
 		} finally {
 			setBusy(false);
 		}
+	}
+
+	async function createLoan(data) {
+		const db = getSupabase();
+		const row = {
+			id: newId('loan'),
+			name: data.name,
+			phone: data.phone || null,
+			principal: data.principal,
+			start_date: data.startDate,
+			end_date: data.endDate,
+			notes: data.notes || null
+		};
+		const { data: created, error } = await db.from('loans').insert(row).select('*').single();
+		if (error) throw error;
+		return created;
+	}
+
+	async function updateLoan(id, data) {
+		const db = getSupabase();
+		const { error } = await db
+			.from('loans')
+			.update({
+				name: data.name,
+				phone: data.phone || null,
+				principal: data.principal,
+				start_date: data.startDate,
+				end_date: data.endDate,
+				notes: data.notes || null
+			})
+			.eq('id', id);
+		if (error) throw error;
+	}
+
+	async function deleteLoan(id) {
+		const db = getSupabase();
+		const { error } = await db.from('loans').delete().eq('id', id);
+		if (error) throw error;
+	}
+
+	async function addRepaymentToDb(loanId, payment) {
+		const db = getSupabase();
+		const { error } = await db.from('repayments').insert({
+			id: newId('pay'),
+			loan_id: loanId,
+			amount: payment.amount,
+			payment_date: payment.date,
+			note: payment.note || null
+		});
+		if (error) throw error;
+	}
+
+	async function deleteRepaymentFromDb(payId) {
+		const db = getSupabase();
+		const { error } = await db.from('repayments').delete().eq('id', payId);
+		if (error) throw error;
 	}
 
 	function parseDate(str) {
@@ -648,7 +736,7 @@ body.is-busy .btn { pointer-events: none; opacity: 0.7; }
 		if (!confirm(`Delete loan record for "${r.name}"? This cannot be undone.`)) return;
 		setBusy(true);
 		try {
-			await apiRequest('DELETE', '/loans/' + encodeURIComponent(id));
+			await deleteLoan(id);
 			if ($('editId').value === id) resetForm();
 			await loadRecords();
 			refresh();
@@ -714,7 +802,7 @@ body.is-busy .btn { pointer-events: none; opacity: 0.7; }
 		if (!r || !confirm('Remove this payment?')) return;
 		setBusy(true);
 		try {
-			await apiRequest('DELETE', '/repayments/' + encodeURIComponent(payId));
+			await deleteRepaymentFromDb(payId);
 			await loadRecords();
 			openRepayModal(repayTargetId);
 			refresh();
@@ -757,11 +845,7 @@ body.is-busy .btn { pointer-events: none; opacity: 0.7; }
 
 		setBusy(true);
 		try {
-			await apiRequest('POST', '/loans/' + encodeURIComponent(repayTargetId) + '/repayments', {
-				amount,
-				date,
-				note
-			});
+			await addRepaymentToDb(repayTargetId, { amount, date, note });
 			err.classList.remove('show');
 			await loadRecords();
 			openRepayModal(repayTargetId);
@@ -789,9 +873,9 @@ body.is-busy .btn { pointer-events: none; opacity: 0.7; }
 		setBusy(true);
 		try {
 			if (editId) {
-				await apiRequest('PUT', '/loans/' + encodeURIComponent(editId), data);
+				await updateLoan(editId, data);
 			} else {
-				await apiRequest('POST', '/loans', data);
+				await createLoan(data);
 			}
 			resetForm();
 			await loadRecords();
@@ -848,7 +932,7 @@ body.is-busy .btn { pointer-events: none; opacity: 0.7; }
 		let imported = 0;
 		try {
 			for (const r of old) {
-				const loan = await apiRequest('POST', '/loans', {
+				const loan = await createLoan({
 					name: r.name,
 					phone: r.phone,
 					principal: r.principal,
@@ -857,7 +941,7 @@ body.is-busy .btn { pointer-events: none; opacity: 0.7; }
 					notes: r.notes
 				});
 				for (const p of r.repayments || []) {
-					await apiRequest('POST', '/loans/' + encodeURIComponent(loan.id) + '/repayments', {
+					await addRepaymentToDb(loan.id, {
 						amount: p.amount,
 						date: p.date,
 						note: p.note
