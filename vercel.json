@@ -1,4 +1,4 @@
 {
   "version": 2,
-  "buildCommand": "node scripts/generate-config.js"
+  "buildCommand": "npm run build"
 }

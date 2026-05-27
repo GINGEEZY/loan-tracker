@@ -1,10 +1,7 @@
 const fs = require('fs');
-const path = require('path');
 
 const url = process.env.SUPABASE_URL || '';
 const anonKey = process.env.SUPABASE_ANON_KEY || '';
-
-const out = path.join(__dirname, '..', 'config.js'); // local helper; Vercel uses build.js at project root
 const config = { url, anonKey };
 
 if (!url || !anonKey) {
@@ -12,7 +9,7 @@ if (!url || !anonKey) {
 }
 
 fs.writeFileSync(
-	out,
+	'config.js',
 	'window.SUPABASE_CONFIG = ' + JSON.stringify(config, null, 2) + ';\n',
 	'utf8'
 );
