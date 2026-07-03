@@ -31,12 +31,18 @@ h2 { text-align: center; font-size: 1.75rem; color: var(--primary); margin-botto
 .card h3::before { content: ''; width: 4px; height: 24px; background: var(--primary); border-radius: 2px; }
 
 .summary-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 14px; margin-bottom: 20px; }
-.summary-tile { background: #fff; padding: 16px 18px; border-radius: 14px; border: 1px solid var(--border); box-shadow: var(--shadow); }
-.summary-tile .label { font-size: 0.78rem; font-weight: 600; color: var(--gray); text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 6px; }
-.summary-tile .value { font-size: 1.35rem; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--text); }
-.summary-tile.highlight .value { color: var(--primary); }
-.summary-tile.success .value { color: var(--success); }
-.summary-tile.danger .value { color: var(--danger); }
+.summary-tile { padding: 18px; border-radius: 16px; box-shadow: var(--shadow); color: #fff; position: relative; overflow: hidden; }
+.summary-tile::after { content: ''; position: absolute; right: -24px; top: -24px; width: 90px; height: 90px; background: rgba(255,255,255,0.14); border-radius: 50%; }
+.summary-tile .label { font-size: 0.75rem; font-weight: 600; color: rgba(255,255,255,0.92); text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 8px; position: relative; z-index: 1; }
+.summary-tile .value { font-size: 1.5rem; font-weight: 800; font-variant-numeric: tabular-nums; color: #fff; position: relative; z-index: 1; }
+.summary-tile.c-blue { background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%); }
+.summary-tile.c-indigo { background: linear-gradient(135deg, #818cf8 0%, #4f46e5 100%); }
+.summary-tile.c-teal { background: linear-gradient(135deg, #2dd4bf 0%, #0d9488 100%); }
+.summary-tile.c-violet { background: linear-gradient(135deg, #c084fc 0%, #7c3aed 100%); }
+.summary-tile.c-orange { background: linear-gradient(135deg, #fb923c 0%, #ea580c 100%); }
+.summary-tile.c-green { background: linear-gradient(135deg, #34d399 0%, #059669 100%); }
+.summary-tile.c-red { background: linear-gradient(135deg, #f87171 0%, #dc2626 100%); }
+.summary-tile.c-amber { background: linear-gradient(135deg, #fbbf24 0%, #d97706 100%); }
 
 .form-grid {
 	display: grid;
@@ -855,15 +861,15 @@ body.is-busy .btn { pointer-events: none; opacity: 0.7; }
 		});
 
 		$('summaryGrid').innerHTML = [
-			tile('Borrowers', uniquePersonCount(), ''),
-			tile('Total loans', records.length, ''),
-			tile('Total principal', formatMoney(totalPrincipal), ''),
-			tile('Total interest', formatMoney(totalInterest), 'highlight'),
-			tile('Total payable', formatMoney(totalPayable), 'highlight'),
-			tile('Total collected', formatMoney(totalPaidSum), 'success'),
-			tile('Outstanding balance', formatMoney(totalBalance), totalBalance > 0 ? 'danger' : 'success'),
-			tile('Waived', formatMoney(totalWaived), totalWaived > 0 ? 'danger' : ''),
-			tile('Settled loans', settledCount, 'success')
+			tile('Borrowers', uniquePersonCount(), 'c-indigo'),
+			tile('Total loans', records.length, 'c-blue'),
+			tile('Total principal', formatMoney(totalPrincipal), 'c-violet'),
+			tile('Total interest', formatMoney(totalInterest), 'c-orange'),
+			tile('Total payable', formatMoney(totalPayable), 'c-teal'),
+			tile('Total collected', formatMoney(totalPaidSum), 'c-green'),
+			tile('Outstanding balance', formatMoney(totalBalance), totalBalance > 0 ? 'c-red' : 'c-green'),
+			tile('Waived', formatMoney(totalWaived), totalWaived > 0 ? 'c-amber' : 'c-teal'),
+			tile('Settled loans', settledCount, 'c-green')
 		].join('');
 	}
 
