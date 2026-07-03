@@ -1,7 +1,5 @@
 const fs = require('fs');
 
-const url = (process.env.SUPABASE_URL || '').trim();
-const anonKey = (process.env.SUPABASE_ANON_KEY || '').trim();
 const isVercel = Boolean(process.env.VERCEL);
 
 function fail(message) {
@@ -9,17 +7,52 @@ function fail(message) {
 	process.exit(1);
 }
 
-if (isVercel && (!url || !anonKey)) {
+function cleanEnv(value) {
+	return String(value || '')
+		.trim()
+		.replace(/^['"]|['"]$/g, '');
+}
+
+function normalizeSupabaseUrl(raw) {
+	let url = cleanEnv(raw);
+	if (!url) return '';
+
+	// Common copy-paste mistakes
+	url = url.replace(/\/rest\/v1\/?$/i, '');
+	url = url.replace(/\/+$/, '');
+	if (url.startsWith('http://')) {
+		url = 'https://' + url.slice('http://'.length);
+	}
+	if (!url.startsWith('https://')) {
+		url = 'https://' + url.replace(/^\/+/, '');
+	}
+
+	try {
+		const parsed = new URL(url);
+		if (!parsed.hostname.endsWith('.supabase.co')) {
+			return { error: 'hostname must end with .supabase.co (got: ' + parsed.hostname + ')' };
+		}
+		return { url: 'https://' + parsed.hostname };
+	} catch {
+		return { error: 'not a valid URL' };
+	}
+}
+
+const urlResult = normalizeSupabaseUrl(process.env.SUPABASE_URL);
+const anonKey = cleanEnv(process.env.SUPABASE_ANON_KEY);
+
+if (isVercel && (!urlResult.url || !anonKey)) {
+	if (urlResult.error) {
+		fail('Invalid SUPABASE_URL: ' + urlResult.error);
+	}
 	fail('Set SUPABASE_URL and SUPABASE_ANON_KEY in Vercel → Settings → Environment Variables, then redeploy.');
 }
 
-if (url && !/^https:\/\/[a-z0-9-]+\.supabase\.co\/?$/i.test(url)) {
-	fail(
-		'SUPABASE_URL must look like https://YOUR_PROJECT.supabase.co (no /rest/v1 path, no Vercel URL).'
-	);
+if (urlResult.error) {
+	fail('Invalid SUPABASE_URL: ' + urlResult.error);
 }
 
-const config = { url: url.replace(/\/$/, ''), anonKey };
+const config = { url: urlResult.url, anonKey };
 const configJs = 'window.SUPABASE_CONFIG = ' + JSON.stringify(config, null, 2) + ';\n';
 
 try {
@@ -36,7 +69,7 @@ try {
 
 	fs.writeFileSync(indexPath, replaced, 'utf8');
 	console.log('Build OK — injected Supabase config into index.html');
-	if (!url || !anonKey) {
+	if (!config.url || !config.anonKey) {
 		console.warn('WARNING: SUPABASE_URL or SUPABASE_ANON_KEY missing — local build only.');
 	}
 	process.exit(0);
