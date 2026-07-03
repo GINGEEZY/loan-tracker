@@ -159,7 +159,7 @@ body.is-busy .btn { pointer-events: none; opacity: 0.7; }
 				</div>
 				<div>
 					<label for="principal">Principal amount *</label>
-					<input type="number" id="principal" required min="0.01" step="0.01" placeholder="0.00">
+					<input type="text" id="principal" required inputmode="decimal" autocomplete="off" placeholder="0.00">
 				</div>
 				<div>
 					<label for="startDate">Start date *</label>
@@ -534,8 +534,31 @@ body.is-busy .btn { pointer-events: none; opacity: 0.7; }
 		return (Number(n) || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 	}
 
+	function parseAmount(str) {
+		if (str == null) return NaN;
+		const cleaned = String(str).replace(/,/g, '').trim();
+		if (cleaned === '') return NaN;
+		return Number(cleaned);
+	}
+
+	function formatAmountForInput(str) {
+		let raw = String(str == null ? '' : str).replace(/[^\d.]/g, '');
+		const firstDot = raw.indexOf('.');
+		if (firstDot !== -1) {
+			raw = raw.slice(0, firstDot + 1) + raw.slice(firstDot + 1).replace(/\./g, '');
+		}
+		if (raw === '') return '';
+		let [intPart, decPart] = raw.split('.');
+		intPart = intPart.replace(/^0+(?=\d)/, '');
+		const grouped = (intPart || '0').replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+		if (decPart !== undefined) {
+			return grouped + '.' + decPart.slice(0, 2);
+		}
+		return grouped;
+	}
+
 	function updateFormPreview() {
-		const principal = $('principal').value;
+		const principal = parseAmount($('principal').value);
 		const start = $('startDate').value;
 		const end = $('endDate').value;
 		if (!principal || !start || !end) {
@@ -710,7 +733,7 @@ body.is-busy .btn { pointer-events: none; opacity: 0.7; }
 		return {
 			name: $('borrowerName').value.trim(),
 			phone: $('borrowerPhone').value.trim(),
-			principal: Number($('principal').value),
+			principal: parseAmount($('principal').value),
 			startDate: $('startDate').value,
 			endDate: $('endDate').value,
 			notes: $('notes').value.trim()
@@ -723,7 +746,7 @@ body.is-busy .btn { pointer-events: none; opacity: 0.7; }
 		$('editId').value = r.id;
 		$('borrowerName').value = r.name;
 		$('borrowerPhone').value = r.phone || '';
-		$('principal').value = r.principal;
+		$('principal').value = formatAmountForInput(r.principal);
 		$('startDate').value = r.startDate;
 		$('endDate').value = r.endDate;
 		$('notes').value = r.notes || '';
@@ -895,6 +918,18 @@ body.is-busy .btn { pointer-events: none; opacity: 0.7; }
 	['principal', 'startDate', 'endDate'].forEach((id) => {
 		$(id).addEventListener('input', updateFormPreview);
 		$(id).addEventListener('change', updateFormPreview);
+	});
+
+	$('principal').addEventListener('input', function () {
+		const el = this;
+		const before = el.value;
+		const caretFromEnd = before.length - el.selectionStart;
+		const formatted = formatAmountForInput(before);
+		if (formatted !== before) {
+			el.value = formatted;
+			const newPos = Math.max(0, formatted.length - caretFromEnd);
+			el.setSelectionRange(newPos, newPos);
+		}
 	});
 
 	$('cancelEditBtn').addEventListener('click', resetForm);
