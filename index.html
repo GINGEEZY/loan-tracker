@@ -166,6 +166,14 @@ tr:hover td { background: #f9fafb; }
 .name-link { color: var(--primary); text-decoration: none; border-bottom: 1px dashed var(--primary); cursor: pointer; }
 .name-link:hover { border-bottom-style: solid; }
 
+.pagination { display: flex; align-items: center; justify-content: center; gap: 8px; margin-top: 14px; flex-wrap: wrap; }
+.pagination:empty { display: none; }
+.pagination button { padding: 6px 12px; border: 1px solid var(--border); background: #fff; border-radius: 8px; cursor: pointer; font-size: 0.85rem; font-weight: 600; color: var(--text); font-family: inherit; }
+.pagination button:hover:not(:disabled) { background: var(--gray-light); border-color: var(--primary); }
+.pagination button.current { background: var(--primary); color: #fff; border-color: var(--primary); }
+.pagination button:disabled { opacity: 0.45; cursor: default; }
+.pagination .page-info { font-size: 0.82rem; color: var(--gray); margin: 0 4px; }
+
 .db-banner { padding: 10px 14px; border-radius: 10px; margin-bottom: 16px; font-size: 0.88rem; text-align: center; }
 .db-banner.ok { background: var(--success-light); color: var(--success); border: 1px solid var(--success); }
 .db-banner.err { background: var(--danger-light); color: #991b1b; border: 1px solid var(--danger); }
@@ -222,6 +230,7 @@ body.is-busy .btn { pointer-events: none; opacity: 0.7; }
 					<tbody id="loanTableBody"></tbody>
 				</table>
 			</div>
+			<div class="pagination" id="borrowersPagination"></div>
 			<div class="empty-state" id="emptyState" style="display:none">
 				<strong>No active borrowers</strong>
 				<p>Click "Add borrower" to create a record, or check the History tab for completed deals.</p>
@@ -260,6 +269,7 @@ body.is-busy .btn { pointer-events: none; opacity: 0.7; }
 					<tbody id="historyTableBody"></tbody>
 				</table>
 			</div>
+			<div class="pagination" id="historyPagination"></div>
 			<div class="empty-state" id="historyEmpty" style="display:none">
 				<strong>No completed deals yet</strong>
 				<p>Deals appear here once they are paid in full or completed.</p>
@@ -382,11 +392,14 @@ body.is-busy .btn { pointer-events: none; opacity: 0.7; }
 
 	const MONTHLY_RATE = 0.10;
 	const STORAGE_KEY = 'loanTrackerRecords_v1';
+	const PAGE_SIZE = 10;
 
 	let records = [];
 	let repayTargetId = null;
 	let busy = false;
 	let supabase = null;
+	let activePage = 1;
+	let historyPage = 1;
 
 	const $ = (id) => document.getElementById(id);
 
@@ -864,6 +877,29 @@ body.is-busy .btn { pointer-events: none; opacity: 0.7; }
 		return hay.includes(q);
 	}
 
+	function renderPagination(container, total, page, gotoFn) {
+		const pages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+		if (pages <= 1) {
+			container.innerHTML = '';
+			return;
+		}
+		const from = (page - 1) * PAGE_SIZE + 1;
+		const to = Math.min(total, page * PAGE_SIZE);
+		let html = `<button type="button" data-goto="${page - 1}" ${page <= 1 ? 'disabled' : ''}>Prev</button>`;
+		for (let p = 1; p <= pages; p += 1) {
+			html += `<button type="button" class="${p === page ? 'current' : ''}" data-goto="${p}">${p}</button>`;
+		}
+		html += `<button type="button" data-goto="${page + 1}" ${page >= pages ? 'disabled' : ''}>Next</button>`;
+		html += `<span class="page-info">${from}–${to} of ${total}</span>`;
+		container.innerHTML = html;
+		container.querySelectorAll('[data-goto]').forEach((b) => {
+			b.addEventListener('click', () => {
+				const p = Number(b.getAttribute('data-goto'));
+				if (p >= 1 && p <= pages) gotoFn(p);
+			});
+		});
+	}
+
 	function attachRowHandlers(tbody) {
 		tbody.querySelectorAll('[data-profile]').forEach((el) => {
 			el.addEventListener('click', (e) => {
@@ -888,20 +924,26 @@ body.is-busy .btn { pointer-events: none; opacity: 0.7; }
 	function renderTable() {
 		const q = ($('searchInput').value || '').trim().toLowerCase();
 		const status = $('statusFilter').value;
-		const list = records.filter((r) => !isSettled(r) && matchesSearch(r, q) && (!status || getStatus(r) === status));
+		const all = records.filter((r) => !isSettled(r) && matchesSearch(r, q) && (!status || getStatus(r) === status));
 
 		const tbody = $('loanTableBody');
 		const empty = $('emptyState');
 		const table = tbody.closest('table');
 
-		if (list.length === 0) {
+		if (all.length === 0) {
 			tbody.innerHTML = '';
 			empty.style.display = 'block';
 			table.style.display = 'none';
+			$('borrowersPagination').innerHTML = '';
 			return;
 		}
 		empty.style.display = 'none';
 		table.style.display = '';
+
+		const totalPages = Math.max(1, Math.ceil(all.length / PAGE_SIZE));
+		if (activePage > totalPages) activePage = totalPages;
+		if (activePage < 1) activePage = 1;
+		const list = all.slice((activePage - 1) * PAGE_SIZE, activePage * PAGE_SIZE);
 
 		tbody.innerHTML = list.map((r) => {
 			const calc = getLoanCalc(r);
@@ -923,25 +965,35 @@ body.is-busy .btn { pointer-events: none; opacity: 0.7; }
 		}).join('');
 
 		attachRowHandlers(tbody);
+		renderPagination($('borrowersPagination'), all.length, activePage, (p) => {
+			activePage = p;
+			renderTable();
+		});
 	}
 
 	function renderHistory() {
 		const q = ($('historySearch').value || '').trim().toLowerCase();
 		const status = $('historyStatusFilter').value;
-		const list = records.filter((r) => isSettled(r) && matchesSearch(r, q) && (!status || getStatus(r) === status));
+		const all = records.filter((r) => isSettled(r) && matchesSearch(r, q) && (!status || getStatus(r) === status));
 
 		const tbody = $('historyTableBody');
 		const empty = $('historyEmpty');
 		const table = tbody.closest('table');
 
-		if (list.length === 0) {
+		if (all.length === 0) {
 			tbody.innerHTML = '';
 			empty.style.display = 'block';
 			table.style.display = 'none';
+			$('historyPagination').innerHTML = '';
 			return;
 		}
 		empty.style.display = 'none';
 		table.style.display = '';
+
+		const totalPages = Math.max(1, Math.ceil(all.length / PAGE_SIZE));
+		if (historyPage > totalPages) historyPage = totalPages;
+		if (historyPage < 1) historyPage = 1;
+		const list = all.slice((historyPage - 1) * PAGE_SIZE, historyPage * PAGE_SIZE);
 
 		tbody.innerHTML = list.map((r) => {
 			const calc = getLoanCalc(r);
@@ -967,6 +1019,10 @@ body.is-busy .btn { pointer-events: none; opacity: 0.7; }
 		}).join('');
 
 		attachRowHandlers(tbody);
+		renderPagination($('historyPagination'), all.length, historyPage, (p) => {
+			historyPage = p;
+			renderHistory();
+		});
 	}
 
 	function openDetailModal(id) {
@@ -1393,10 +1449,10 @@ body.is-busy .btn { pointer-events: none; opacity: 0.7; }
 	$('resetFormBtn').addEventListener('click', () => {
 		setTimeout(resetForm, 0);
 	});
-	$('searchInput').addEventListener('input', renderTable);
-	$('statusFilter').addEventListener('change', renderTable);
-	$('historySearch').addEventListener('input', renderHistory);
-	$('historyStatusFilter').addEventListener('change', renderHistory);
+	$('searchInput').addEventListener('input', () => { activePage = 1; renderTable(); });
+	$('statusFilter').addEventListener('change', () => { activePage = 1; renderTable(); });
+	$('historySearch').addEventListener('input', () => { historyPage = 1; renderHistory(); });
+	$('historyStatusFilter').addEventListener('change', () => { historyPage = 1; renderHistory(); });
 
 	document.querySelectorAll('.tab-btn').forEach((btn) => {
 		btn.addEventListener('click', () => switchTab(btn.getAttribute('data-tab')));
