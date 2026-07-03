@@ -249,6 +249,7 @@ body.is-busy .btn { pointer-events: none; opacity: 0.7; }
 							<th class="num">Principal</th>
 							<th class="num">Total payable</th>
 							<th class="num">Paid</th>
+							<th class="num">Balance</th>
 							<th class="num">Waived</th>
 							<th>Completed on</th>
 							<th>Status</th>
@@ -656,6 +657,10 @@ body.is-busy .btn { pointer-events: none; opacity: 0.7; }
 		return Math.max(0, getLoanCalc(record).payable - totalPaid(record));
 	}
 
+	function getRemaining(record) {
+		return Math.max(0, getLoanCalc(record).payable - totalPaid(record));
+	}
+
 	function getWaived(record) {
 		if (!isClosed(record)) return 0;
 		return Math.max(0, getLoanCalc(record).payable - totalPaid(record));
@@ -905,6 +910,7 @@ body.is-busy .btn { pointer-events: none; opacity: 0.7; }
 		tbody.innerHTML = list.map((r) => {
 			const calc = getLoanCalc(r);
 			const paid = totalPaid(r);
+			const remaining = getRemaining(r);
 			const waived = getWaived(r);
 			const status2 = getStatus(r);
 			const settled = settledDate(r);
@@ -913,6 +919,7 @@ body.is-busy .btn { pointer-events: none; opacity: 0.7; }
 				<td class="num">${formatMoney(r.principal)}</td>
 				<td class="num">${formatMoney(calc.payable)}</td>
 				<td class="num">${formatMoney(paid)}</td>
+				<td class="num">${formatMoney(remaining)}</td>
 				<td class="num">${waived > 0.005 ? formatMoney(waived) : '—'}</td>
 				<td>${settled ? formatDate(settled) : '—'}</td>
 				<td><span class="badge badge-${status2}">${statusLabel(status2)}</span></td>
@@ -931,11 +938,11 @@ body.is-busy .btn { pointer-events: none; opacity: 0.7; }
 		if (!r) return;
 		const calc = getLoanCalc(r);
 		const paid = totalPaid(r);
-		const balance = getBalance(r);
 		const waived = getWaived(r);
 		const status = getStatus(r);
 		const settled = settledDate(r);
 		const closed = isClosed(r);
+		const remaining = getRemaining(r);
 		const personLoanCount = relatedLoans(r).length;
 
 		const payments = [...(r.repayments || [])].sort((a, b) => (b.date || '').localeCompare(a.date || ''));
@@ -952,7 +959,7 @@ body.is-busy .btn { pointer-events: none; opacity: 0.7; }
 			<div class="money-row">
 				<div class="money-card payable"><div class="m-label">Total payable</div><div class="m-value">${formatMoney(calc.payable)}</div></div>
 				<div class="money-card paid"><div class="m-label">Paid</div><div class="m-value">${formatMoney(paid)}</div></div>
-				<div class="money-card balance ${balance <= 0.005 ? 'zero' : ''}"><div class="m-label">${closed ? 'Balance (closed)' : 'Balance'}</div><div class="m-value">${formatMoney(balance)}</div></div>
+				<div class="money-card balance ${remaining <= 0.005 ? 'zero' : ''}"><div class="m-label">${closed ? 'Balance (waived)' : 'Balance'}</div><div class="m-value">${formatMoney(remaining)}</div></div>
 			</div>
 			<div class="detail-grid">
 				<div class="d-item accent-gray"><div class="d-label">Contact</div><div class="d-value">${escapeHtml(r.phone || '—')}</div></div>
@@ -1063,13 +1070,13 @@ body.is-busy .btn { pointer-events: none; opacity: 0.7; }
 		const rowsHtml = loans.map((r) => {
 			const calc = getLoanCalc(r);
 			const paid = totalPaid(r);
-			const balance = getBalance(r);
+			const remaining = getRemaining(r);
 			const status = getStatus(r);
 			const settled = settledDate(r);
 			totalBorrowed += Number(r.principal) || 0;
 			totalPayable += calc.payable;
 			totalPaidSum += paid;
-			totalOutstanding += balance;
+			totalOutstanding += getBalance(r);
 			totalWaived += getWaived(r);
 			if (!isSettled(r)) activeCount += 1;
 			return `<tr>
@@ -1077,7 +1084,7 @@ body.is-busy .btn { pointer-events: none; opacity: 0.7; }
 				<td class="num">${formatMoney(r.principal)}</td>
 				<td class="num">${formatMoney(calc.payable)}</td>
 				<td class="num">${formatMoney(paid)}</td>
-				<td class="num">${formatMoney(balance)}</td>
+				<td class="num">${formatMoney(remaining)}${isClosed(r) && remaining > 0.005 ? '<br><span style="font-size:0.7rem;color:var(--warning)">waived</span>' : ''}</td>
 				<td>${settled ? formatDate(settled) : 'Ongoing'}</td>
 				<td><span class="badge badge-${status}">${statusLabel(status)}</span></td>
 				<td class="actions"><button type="button" class="btn btn-primary btn-sm" data-view="${r.id}">View</button></td>
