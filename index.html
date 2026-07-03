@@ -165,10 +165,6 @@ body.is-busy .btn { pointer-events: none; opacity: 0.7; }
 					<label for="startDate">Start date *</label>
 					<input type="date" id="startDate" required>
 				</div>
-				<div>
-					<label for="endDate">End date *</label>
-					<input type="date" id="endDate" required>
-				</div>
 				<div class="span-2">
 					<label for="notes">Notes</label>
 					<input type="text" id="notes" placeholder="Optional remarks">
@@ -189,9 +185,10 @@ body.is-busy .btn { pointer-events: none; opacity: 0.7; }
 				<button type="reset" class="btn btn-secondary" id="resetFormBtn">Clear form</button>
 			</div>
 			<div class="help-box">
-				<strong>Duration:</strong> Full calendar months from start date, then exact remaining days (e.g. 1 Jan → 8 Feb = <strong>1 month, 7 days</strong>).<br>
+				<strong>Duration:</strong> Interest accrues from the start date and keeps growing until the loan is fully paid. While unpaid, it is calculated up to today.<br>
 				<strong>Interest:</strong> (Principal × 10% × full months) + (Principal × 10% × days ÷ 30).<br>
-				<strong>Storage:</strong> All borrowers and repayments are saved in your Supabase database via Vercel API routes.
+				<strong>Settled on:</strong> Once the full balance is paid, the date of the final payment becomes the end date and interest stops there.<br>
+				<strong>Storage:</strong> All borrowers and repayments are saved in your Supabase database.
 			</div>
 		</form>
 	</div>
@@ -204,7 +201,6 @@ body.is-busy .btn { pointer-events: none; opacity: 0.7; }
 				<option value="">All statuses</option>
 				<option value="paid">Paid in full</option>
 				<option value="partial">Partially paid</option>
-				<option value="overdue">Overdue</option>
 				<option value="pending">No payments yet</option>
 			</select>
 			<button type="button" class="btn btn-secondary btn-sm" id="exportBtn">Export JSON</button>
@@ -218,7 +214,7 @@ body.is-busy .btn { pointer-events: none; opacity: 0.7; }
 						<th>Contact</th>
 						<th class="num">Principal</th>
 						<th>Start</th>
-						<th>End</th>
+						<th>Settled on</th>
 						<th>Duration</th>
 						<th class="num">Interest (10%)</th>
 						<th class="num">Total payable</th>
@@ -335,7 +331,6 @@ body.is-busy .btn { pointer-events: none; opacity: 0.7; }
 			phone: loan.phone || '',
 			principal: Number(loan.principal),
 			startDate: loan.start_date,
-			endDate: loan.end_date,
 			notes: loan.notes || '',
 			createdAt: loan.created_at,
 			repayments: byLoan[loan.id] || []
@@ -374,7 +369,7 @@ body.is-busy .btn { pointer-events: none; opacity: 0.7; }
 			phone: data.phone || null,
 			principal: data.principal,
 			start_date: data.startDate,
-			end_date: data.endDate,
+			end_date: null,
 			notes: data.notes || null
 		};
 		const { data: created, error } = await db.from('loans').insert(row).select('*').single();
@@ -391,7 +386,6 @@ body.is-busy .btn { pointer-events: none; opacity: 0.7; }
 				phone: data.phone || null,
 				principal: data.principal,
 				start_date: data.startDate,
-				end_date: data.endDate,
 				notes: data.notes || null
 			})
 			.eq('id', id);
@@ -511,17 +505,39 @@ body.is-busy .btn { pointer-events: none; opacity: 0.7; }
 		return (record.repayments || []).reduce((sum, r) => sum + (Number(r.amount) || 0), 0);
 	}
 
-	function getStatus(record) {
-		const { payable } = calcLoan(record.principal, record.startDate, record.endDate);
-		const paid = totalPaid(record);
-		const balance = Math.max(0, payable - paid);
-		const end = parseDate(record.endDate);
-		const today = new Date();
-		today.setHours(0, 0, 0, 0);
+	function todayStr() {
+		const d = new Date();
+		d.setHours(0, 0, 0, 0);
+		return d.toISOString().slice(0, 10);
+	}
 
-		if (balance <= 0.005) return 'paid';
-		if (end && end < today) return 'overdue';
-		if (paid > 0) return 'partial';
+	function lastPaymentDate(record) {
+		const dates = (record.repayments || []).map((p) => p.date).filter(Boolean).sort();
+		return dates.length ? dates[dates.length - 1] : null;
+	}
+
+	function isFullyPaid(record) {
+		const end = lastPaymentDate(record);
+		if (!end) return false;
+		const payable = calcLoan(record.principal, record.startDate, end).payable;
+		return totalPaid(record) >= payable - 0.005;
+	}
+
+	function settledDate(record) {
+		return isFullyPaid(record) ? lastPaymentDate(record) : null;
+	}
+
+	function effectiveEndDate(record) {
+		return isFullyPaid(record) ? lastPaymentDate(record) : todayStr();
+	}
+
+	function getLoanCalc(record) {
+		return calcLoan(record.principal, record.startDate, effectiveEndDate(record));
+	}
+
+	function getStatus(record) {
+		if (isFullyPaid(record)) return 'paid';
+		if (totalPaid(record) > 0) return 'partial';
 		return 'pending';
 	}
 
@@ -560,8 +576,8 @@ body.is-busy .btn { pointer-events: none; opacity: 0.7; }
 	function updateFormPreview() {
 		const principal = parseAmount($('principal').value);
 		const start = $('startDate').value;
-		const end = $('endDate').value;
-		if (!principal || !start || !end) {
+		const end = todayStr();
+		if (!principal || !start) {
 			$('pvDuration').textContent = '—';
 			$('pvEquiv').textContent = '—';
 			$('pvInterestBreakdown').textContent = '—';
@@ -571,7 +587,7 @@ body.is-busy .btn { pointer-events: none; opacity: 0.7; }
 		}
 		const calc = calcLoan(principal, start, end);
 		const p = Number(principal) || 0;
-		$('pvDuration').textContent = calc.durationLabel;
+		$('pvDuration').textContent = calc.durationLabel + ' (as of today)';
 		$('pvEquiv').textContent = calc.interestMonths.toFixed(4).replace(/\.?0+$/, '') + ' mo';
 		if (calc.months === 0 && calc.days === 0) {
 			$('pvInterestBreakdown').textContent = 'No interest (0 days)';
@@ -612,10 +628,10 @@ body.is-busy .btn { pointer-events: none; opacity: 0.7; }
 		let totalPayable = 0;
 		let totalPaidSum = 0;
 		let totalBalance = 0;
-		let overdueCount = 0;
+		let settledCount = 0;
 
 		records.forEach((r) => {
-			const calc = calcLoan(r.principal, r.startDate, r.endDate);
+			const calc = getLoanCalc(r);
 			const paid = totalPaid(r);
 			const balance = Math.max(0, calc.payable - paid);
 			totalPrincipal += Number(r.principal) || 0;
@@ -623,7 +639,7 @@ body.is-busy .btn { pointer-events: none; opacity: 0.7; }
 			totalPayable += calc.payable;
 			totalPaidSum += paid;
 			totalBalance += balance;
-			if (getStatus(r) === 'overdue') overdueCount += 1;
+			if (isFullyPaid(r)) settledCount += 1;
 		});
 
 		$('summaryGrid').innerHTML = [
@@ -633,7 +649,7 @@ body.is-busy .btn { pointer-events: none; opacity: 0.7; }
 			tile('Total payable', formatMoney(totalPayable), 'highlight'),
 			tile('Total collected', formatMoney(totalPaidSum), 'success'),
 			tile('Outstanding balance', formatMoney(totalBalance), totalBalance > 0 ? 'danger' : 'success'),
-			tile('Overdue loans', overdueCount, overdueCount > 0 ? 'danger' : '')
+			tile('Settled loans', settledCount, 'success')
 		].join('');
 	}
 
@@ -673,16 +689,17 @@ body.is-busy .btn { pointer-events: none; opacity: 0.7; }
 		}
 
 		tbody.innerHTML = list.map((r) => {
-			const calc = calcLoan(r.principal, r.startDate, r.endDate);
+			const calc = getLoanCalc(r);
 			const paid = totalPaid(r);
 			const balance = Math.max(0, calc.payable - paid);
 			const status = getStatus(r);
+			const settled = settledDate(r);
 			return `<tr>
 				<td><strong>${escapeHtml(r.name)}</strong>${r.notes ? `<br><span style="font-size:0.78rem;color:var(--gray)">${escapeHtml(r.notes)}</span>` : ''}</td>
 				<td>${escapeHtml(r.phone || '—')}</td>
 				<td class="num">${formatMoney(r.principal)}</td>
 				<td>${formatDate(r.startDate)}</td>
-				<td>${formatDate(r.endDate)}</td>
+				<td>${settled ? formatDate(settled) : '<span style="color:var(--gray)">Ongoing</span>'}</td>
 				<td>${escapeHtml(calc.durationLabel)}<br><span style="font-size:0.75rem;color:var(--gray)">${calc.interestMonths.toFixed(2)} mo @ 10%</span></td>
 				<td class="num">${formatMoney(calc.interest)}</td>
 				<td class="num">${formatMoney(calc.payable)}</td>
@@ -724,8 +741,7 @@ body.is-busy .btn { pointer-events: none; opacity: 0.7; }
 	function validateFormData(data) {
 		if (!data.name.trim()) return 'Borrower name is required.';
 		if (!data.principal || data.principal <= 0) return 'Principal must be greater than zero.';
-		if (!data.startDate || !data.endDate) return 'Start and end dates are required.';
-		if (parseDate(data.endDate) < parseDate(data.startDate)) return 'End date cannot be before start date.';
+		if (!data.startDate) return 'Start date is required.';
 		return '';
 	}
 
@@ -735,7 +751,6 @@ body.is-busy .btn { pointer-events: none; opacity: 0.7; }
 			phone: $('borrowerPhone').value.trim(),
 			principal: parseAmount($('principal').value),
 			startDate: $('startDate').value,
-			endDate: $('endDate').value,
 			notes: $('notes').value.trim()
 		};
 	}
@@ -748,7 +763,6 @@ body.is-busy .btn { pointer-events: none; opacity: 0.7; }
 		$('borrowerPhone').value = r.phone || '';
 		$('principal').value = formatAmountForInput(r.principal);
 		$('startDate').value = r.startDate;
-		$('endDate').value = r.endDate;
 		$('notes').value = r.notes || '';
 		$('formTitle').textContent = 'Edit borrower';
 		$('submitBtn').textContent = 'Update borrower';
@@ -779,7 +793,7 @@ body.is-busy .btn { pointer-events: none; opacity: 0.7; }
 		const r = records.find((x) => x.id === id);
 		if (!r) return;
 		repayTargetId = id;
-		const calc = calcLoan(r.principal, r.startDate, r.endDate);
+		const calc = getLoanCalc(r);
 		const paid = totalPaid(r);
 		const balance = Math.max(0, calc.payable - paid);
 
@@ -861,7 +875,7 @@ body.is-busy .btn { pointer-events: none; opacity: 0.7; }
 			return;
 		}
 
-		const calc = calcLoan(r.principal, r.startDate, r.endDate);
+		const calc = getLoanCalc(r);
 		const paid = totalPaid(r);
 		const balance = calc.payable - paid;
 
@@ -915,7 +929,7 @@ body.is-busy .btn { pointer-events: none; opacity: 0.7; }
 		}
 	});
 
-	['principal', 'startDate', 'endDate'].forEach((id) => {
+	['principal', 'startDate'].forEach((id) => {
 		$(id).addEventListener('input', updateFormPreview);
 		$(id).addEventListener('change', updateFormPreview);
 	});
@@ -977,7 +991,6 @@ body.is-busy .btn { pointer-events: none; opacity: 0.7; }
 					phone: r.phone,
 					principal: r.principal,
 					startDate: r.startDate,
-					endDate: r.endDate,
 					notes: r.notes
 				});
 				for (const p of r.repayments || []) {
