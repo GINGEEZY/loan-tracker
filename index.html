@@ -45,15 +45,16 @@ h2 { text-align: center; font-size: 1.75rem; color: var(--primary); margin-botto
 	align-items: end;
 }
 .form-grid label { display: block; font-size: 0.78rem; font-weight: 600; color: var(--gray); text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 4px; }
-.form-grid input, .form-grid textarea {
+.form-grid input, .form-grid textarea, .form-grid select {
 	width: 100%;
 	padding: 10px 12px;
 	border: 2px solid var(--border);
 	border-radius: 10px;
 	font-size: 0.95rem;
 	font-family: inherit;
+	background: #fff;
 }
-.form-grid input:focus, .form-grid textarea:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px var(--primary-light); }
+.form-grid input:focus, .form-grid textarea:focus, .form-grid select:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px var(--primary-light); }
 .form-grid .span-2 { grid-column: span 2; }
 @media (max-width: 520px) { .form-grid .span-2 { grid-column: span 1; } }
 
@@ -274,6 +275,12 @@ body.is-busy .btn { pointer-events: none; opacity: 0.7; }
 		<form id="loanForm" autocomplete="off">
 			<input type="hidden" id="editId" value="">
 			<div class="form-grid">
+				<div class="span-2" id="existingCustomerWrap">
+					<label for="existingCustomer">Existing customer</label>
+					<select id="existingCustomer">
+						<option value="">— New customer —</option>
+					</select>
+				</div>
 				<div>
 					<label for="borrowerName">Borrower name *</label>
 					<input type="text" id="borrowerName" required placeholder="Full name">
@@ -691,12 +698,29 @@ body.is-busy .btn { pointer-events: none; opacity: 0.7; }
 			.sort((a, b) => (b.startDate || '').localeCompare(a.startDate || ''));
 	}
 
-	function uniquePersonCount() {
+	function uniquePersons() {
 		const reps = [];
 		records.forEach((r) => {
 			if (!reps.some((g) => samePerson(g, r))) reps.push(r);
 		});
-		return reps.length;
+		return reps
+			.map((r) => ({ name: r.name || '', phone: (r.phone || '').trim() }))
+			.sort((a, b) => a.name.localeCompare(b.name));
+	}
+
+	function uniquePersonCount() {
+		return uniquePersons().length;
+	}
+
+	function populateExistingCustomers() {
+		const sel = $('existingCustomer');
+		const people = uniquePersons();
+		sel.innerHTML = '<option value="">— New customer —</option>' +
+			people.map((p, i) => {
+				const label = p.phone ? `${p.name} (${p.phone})` : p.name;
+				return `<option value="${i}">${escapeHtml(label)}</option>`;
+			}).join('');
+		sel._people = people;
 	}
 
 	function formatMoney(n) {
@@ -776,8 +800,11 @@ body.is-busy .btn { pointer-events: none; opacity: 0.7; }
 
 	function openLoanModal() {
 		resetForm();
+		populateExistingCustomers();
+		$('existingCustomer').value = '';
+		$('existingCustomerWrap').style.display = '';
 		$('loanModal').classList.add('show');
-		setTimeout(() => $('borrowerName').focus(), 50);
+		setTimeout(() => $('existingCustomer').focus(), 50);
 	}
 
 	function closeLoanModal() {
@@ -1174,6 +1201,7 @@ body.is-busy .btn { pointer-events: none; opacity: 0.7; }
 		const r = records.find((x) => x.id === id);
 		if (!r) return;
 		resetForm();
+		$('existingCustomerWrap').style.display = 'none';
 		$('editId').value = r.id;
 		$('borrowerName').value = r.name;
 		$('borrowerPhone').value = r.phone || '';
@@ -1375,6 +1403,18 @@ body.is-busy .btn { pointer-events: none; opacity: 0.7; }
 	});
 
 	$('addBorrowerBtn').addEventListener('click', openLoanModal);
+	$('existingCustomer').addEventListener('change', function () {
+		const people = this._people || [];
+		const person = people[Number(this.value)];
+		if (person) {
+			$('borrowerName').value = person.name;
+			$('borrowerPhone').value = person.phone || '';
+		} else {
+			$('borrowerName').value = '';
+			$('borrowerPhone').value = '';
+		}
+		$('borrowerName').focus();
+	});
 	$('closeLoanModal').addEventListener('click', closeLoanModal);
 	$('loanModal').addEventListener('click', (e) => {
 		if (e.target === $('loanModal')) closeLoanModal();
