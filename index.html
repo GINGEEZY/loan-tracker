@@ -691,6 +691,14 @@ body.is-busy .btn { pointer-events: none; opacity: 0.7; }
 			.sort((a, b) => (b.startDate || '').localeCompare(a.startDate || ''));
 	}
 
+	function uniquePersonCount() {
+		const reps = [];
+		records.forEach((r) => {
+			if (!reps.some((g) => samePerson(g, r))) reps.push(r);
+		});
+		return reps.length;
+	}
+
 	function formatMoney(n) {
 		return (Number(n) || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 	}
@@ -807,7 +815,8 @@ body.is-busy .btn { pointer-events: none; opacity: 0.7; }
 		});
 
 		$('summaryGrid').innerHTML = [
-			tile('Borrowers', records.length, ''),
+			tile('Borrowers', uniquePersonCount(), ''),
+			tile('Total loans', records.length, ''),
 			tile('Total principal', formatMoney(totalPrincipal), ''),
 			tile('Total interest', formatMoney(totalInterest), 'highlight'),
 			tile('Total payable', formatMoney(totalPayable), 'highlight'),
