@@ -956,7 +956,7 @@ body.is-busy .btn { pointer-events: none; opacity: 0.7; }
 			const balance = getBalance(r);
 			const status2 = getStatus(r);
 			return `<tr>
-				<td><strong><a class="name-link" data-profile="${r.id}">${escapeHtml(r.name)}</a></strong>${r.phone ? `<br><span style="font-size:0.78rem;color:var(--gray)">${escapeHtml(r.phone)}</span>` : ''}</td>
+				<td><strong><a class="name-link" data-profile="${r.id}">${escapeHtml(r.name)}</a></strong></td>
 				<td class="num">${formatMoney(r.principal)}</td>
 				<td class="num">${formatMoney(calc.payable)}</td>
 				<td class="num">${formatMoney(balance)}</td>
@@ -1009,7 +1009,7 @@ body.is-busy .btn { pointer-events: none; opacity: 0.7; }
 			const status2 = getStatus(r);
 			const settled = settledDate(r);
 			return `<tr>
-				<td><strong><a class="name-link" data-profile="${r.id}">${escapeHtml(r.name)}</a></strong>${r.phone ? `<br><span style="font-size:0.78rem;color:var(--gray)">${escapeHtml(r.phone)}</span>` : ''}</td>
+				<td><strong><a class="name-link" data-profile="${r.id}">${escapeHtml(r.name)}</a></strong></td>
 				<td class="num">${formatMoney(r.principal)}</td>
 				<td class="num">${formatMoney(calc.payable)}</td>
 				<td class="num">${formatMoney(paid)}</td>
