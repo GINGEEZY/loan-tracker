@@ -4,8 +4,7 @@
   "private": true,
   "description": "Monthly interest loan tracker with Supabase database",
   "scripts": {
-    "sync": "powershell -NoProfile -Command \"Copy-Item -Path '../loan-tracker.html' -Destination './index.html' -Force\"",
     "build": "node build.js",
-    "dev": "vercel dev"
+    "sync": "powershell -NoProfile -Command \"Copy-Item -Path '../loan-tracker.html' -Destination './index.html' -Force\""
   }
 }
