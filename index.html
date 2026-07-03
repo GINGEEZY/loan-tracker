@@ -104,6 +104,7 @@ tr:hover td { background: #f9fafb; }
 
 .badge { display: inline-block; padding: 3px 10px; border-radius: 999px; font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em; }
 .badge-paid { background: var(--success-light); color: var(--success); }
+.badge-closed { background: #e0e7ff; color: #4338ca; }
 .badge-partial { background: var(--warning-light); color: var(--warning); }
 .badge-overdue { background: var(--danger-light); color: var(--danger); }
 .badge-pending { background: var(--primary-light); color: var(--primary); }
@@ -161,6 +162,8 @@ tr:hover td { background: #f9fafb; }
 .detail-grid .d-value { font-size: 1.02rem; font-weight: 700; font-variant-numeric: tabular-nums; word-break: break-word; }
 .detail-grid .d-item.accent-orange .d-value { color: var(--warning); }
 .detail-section-title { font-size: 0.8rem; font-weight: 700; color: var(--gray); text-transform: uppercase; letter-spacing: 0.04em; margin: 16px 0 6px; }
+.name-link { color: var(--primary); text-decoration: none; border-bottom: 1px dashed var(--primary); cursor: pointer; }
+.name-link:hover { border-bottom-style: solid; }
 
 .db-banner { padding: 10px 14px; border-radius: 10px; margin-bottom: 16px; font-size: 0.88rem; text-align: center; }
 .db-banner.ok { background: var(--success-light); color: var(--success); border: 1px solid var(--success); }
@@ -180,6 +183,7 @@ body.is-busy .btn { pointer-events: none; opacity: 0.7; }
 	<div class="tabs">
 		<button type="button" class="tab-btn active" data-tab="dashboard">Dashboard</button>
 		<button type="button" class="tab-btn" data-tab="borrowers">Borrowers</button>
+		<button type="button" class="tab-btn" data-tab="history">History</button>
 	</div>
 
 	<section id="tab-dashboard" class="tab-panel active">
@@ -189,14 +193,13 @@ body.is-busy .btn { pointer-events: none; opacity: 0.7; }
 	<section id="tab-borrowers" class="tab-panel">
 		<div class="card">
 			<div class="list-header">
-				<h3>All borrowers</h3>
+				<h3>Active borrowers</h3>
 				<button type="button" class="btn btn-primary" id="addBorrowerBtn">+ Add borrower</button>
 			</div>
 			<div class="filter-row">
 				<input type="search" id="searchInput" placeholder="Search by name, phone, or notes…">
 				<select id="statusFilter">
-					<option value="">All statuses</option>
-					<option value="paid">Paid in full</option>
+					<option value="">All active</option>
 					<option value="partial">Partially paid</option>
 					<option value="pending">No payments yet</option>
 				</select>
@@ -219,8 +222,45 @@ body.is-busy .btn { pointer-events: none; opacity: 0.7; }
 				</table>
 			</div>
 			<div class="empty-state" id="emptyState" style="display:none">
-				<strong>No borrowers yet</strong>
-				<p>Click "Add borrower" to create your first record.</p>
+				<strong>No active borrowers</strong>
+				<p>Click "Add borrower" to create a record, or check the History tab for completed deals.</p>
+			</div>
+		</div>
+	</section>
+
+	<section id="tab-history" class="tab-panel">
+		<div class="card">
+			<div class="list-header">
+				<h3>History</h3>
+			</div>
+			<div class="filter-row">
+				<input type="search" id="historySearch" placeholder="Search completed deals…">
+				<select id="historyStatusFilter">
+					<option value="">All completed</option>
+					<option value="paid">Paid in full</option>
+					<option value="closed">Closed (waived)</option>
+				</select>
+			</div>
+			<div class="wrap-table">
+				<table class="main-table">
+					<thead>
+						<tr>
+							<th>Borrower</th>
+							<th class="num">Principal</th>
+							<th class="num">Total payable</th>
+							<th class="num">Paid</th>
+							<th class="num">Waived</th>
+							<th>Completed on</th>
+							<th>Status</th>
+							<th>Actions</th>
+						</tr>
+					</thead>
+					<tbody id="historyTableBody"></tbody>
+				</table>
+			</div>
+			<div class="empty-state" id="historyEmpty" style="display:none">
+				<strong>No completed deals yet</strong>
+				<p>Deals appear here once they are paid in full or completed.</p>
 			</div>
 		</div>
 	</section>
@@ -282,6 +322,14 @@ body.is-busy .btn { pointer-events: none; opacity: 0.7; }
 		<button type="button" class="modal-close" id="closeDetailModal" aria-label="Close">&times;</button>
 		<h3 id="detailTitle">Borrower details</h3>
 		<div id="detailBody"></div>
+	</div>
+</div>
+
+<div class="modal" id="profileModal" aria-hidden="true">
+	<div class="modal-content modal-wide">
+		<button type="button" class="modal-close" id="closeProfileModal" aria-label="Close">&times;</button>
+		<h3 id="profileTitle">Borrower profile</h3>
+		<div id="profileBody"></div>
 	</div>
 </div>
 
@@ -382,6 +430,7 @@ body.is-busy .btn { pointer-events: none; opacity: 0.7; }
 			phone: loan.phone || '',
 			principal: Number(loan.principal),
 			startDate: loan.start_date,
+			closedOn: loan.end_date || null,
 			notes: loan.notes || '',
 			createdAt: loan.created_at,
 			repayments: byLoan[loan.id] || []
@@ -446,6 +495,12 @@ body.is-busy .btn { pointer-events: none; opacity: 0.7; }
 	async function deleteLoan(id) {
 		const db = getSupabase();
 		const { error } = await db.from('loans').delete().eq('id', id);
+		if (error) throw error;
+	}
+
+	async function setLoanClosed(id, closedOn) {
+		const db = getSupabase();
+		const { error } = await db.from('loans').update({ end_date: closedOn }).eq('id', id);
 		if (error) throw error;
 	}
 
@@ -567,34 +622,68 @@ body.is-busy .btn { pointer-events: none; opacity: 0.7; }
 		return dates.length ? dates[dates.length - 1] : null;
 	}
 
-	function isFullyPaid(record) {
+	function isClosed(record) {
+		return Boolean(record.closedOn);
+	}
+
+	function isPaidByPayments(record) {
 		const end = lastPaymentDate(record);
 		if (!end) return false;
 		const payable = calcLoan(record.principal, record.startDate, end).payable;
 		return totalPaid(record) >= payable - 0.005;
 	}
 
+	function isSettled(record) {
+		return isClosed(record) || isPaidByPayments(record);
+	}
+
 	function settledDate(record) {
-		return isFullyPaid(record) ? lastPaymentDate(record) : null;
+		if (isClosed(record)) return record.closedOn;
+		return isPaidByPayments(record) ? lastPaymentDate(record) : null;
 	}
 
 	function effectiveEndDate(record) {
-		return isFullyPaid(record) ? lastPaymentDate(record) : todayStr();
+		if (isClosed(record)) return record.closedOn;
+		return isPaidByPayments(record) ? lastPaymentDate(record) : todayStr();
 	}
 
 	function getLoanCalc(record) {
 		return calcLoan(record.principal, record.startDate, effectiveEndDate(record));
 	}
 
+	function getBalance(record) {
+		if (isSettled(record)) return 0;
+		return Math.max(0, getLoanCalc(record).payable - totalPaid(record));
+	}
+
+	function getWaived(record) {
+		if (!isClosed(record)) return 0;
+		return Math.max(0, getLoanCalc(record).payable - totalPaid(record));
+	}
+
 	function getStatus(record) {
-		if (isFullyPaid(record)) return 'paid';
+		if (isClosed(record)) return 'closed';
+		if (isPaidByPayments(record)) return 'paid';
 		if (totalPaid(record) > 0) return 'partial';
 		return 'pending';
 	}
 
 	function statusLabel(status) {
-		const map = { paid: 'Paid', partial: 'Partial', overdue: 'Overdue', pending: 'Pending' };
+		const map = { paid: 'Paid', closed: 'Closed', partial: 'Partial', overdue: 'Overdue', pending: 'Pending' };
 		return map[status] || status;
+	}
+
+	function samePerson(a, b) {
+		const pa = (a.phone || '').trim().toLowerCase();
+		const pb = (b.phone || '').trim().toLowerCase();
+		if (pa && pb) return pa === pb;
+		return (a.name || '').trim().toLowerCase() === (b.name || '').trim().toLowerCase();
+	}
+
+	function relatedLoans(record) {
+		return records
+			.filter((x) => samePerson(x, record))
+			.sort((a, b) => (b.startDate || '').localeCompare(a.startDate || ''));
 	}
 
 	function formatMoney(n) {
@@ -697,18 +786,19 @@ body.is-busy .btn { pointer-events: none; opacity: 0.7; }
 		let totalPayable = 0;
 		let totalPaidSum = 0;
 		let totalBalance = 0;
+		let totalWaived = 0;
 		let settledCount = 0;
 
 		records.forEach((r) => {
 			const calc = getLoanCalc(r);
 			const paid = totalPaid(r);
-			const balance = Math.max(0, calc.payable - paid);
 			totalPrincipal += Number(r.principal) || 0;
 			totalInterest += calc.interest;
 			totalPayable += calc.payable;
 			totalPaidSum += paid;
-			totalBalance += balance;
-			if (isFullyPaid(r)) settledCount += 1;
+			totalBalance += getBalance(r);
+			totalWaived += getWaived(r);
+			if (isSettled(r)) settledCount += 1;
 		});
 
 		$('summaryGrid').innerHTML = [
@@ -718,6 +808,7 @@ body.is-busy .btn { pointer-events: none; opacity: 0.7; }
 			tile('Total payable', formatMoney(totalPayable), 'highlight'),
 			tile('Total collected', formatMoney(totalPaidSum), 'success'),
 			tile('Outstanding balance', formatMoney(totalBalance), totalBalance > 0 ? 'danger' : 'success'),
+			tile('Waived', formatMoney(totalWaived), totalWaived > 0 ? 'danger' : ''),
 			tile('Settled loans', settledCount, 'success')
 		].join('');
 	}
@@ -726,57 +817,19 @@ body.is-busy .btn { pointer-events: none; opacity: 0.7; }
 		return `<div class="summary-tile ${extraClass}"><div class="label">${label}</div><div class="value">${value}</div></div>`;
 	}
 
-	function filteredRecords() {
-		const q = ($('searchInput').value || '').trim().toLowerCase();
-		const status = $('statusFilter').value;
-		return records.filter((r) => {
-			if (status && getStatus(r) !== status) return false;
-			if (!q) return true;
-			const hay = [r.name, r.phone, r.notes].filter(Boolean).join(' ').toLowerCase();
-			return hay.includes(q);
-		});
+	function matchesSearch(r, q) {
+		if (!q) return true;
+		const hay = [r.name, r.phone, r.notes].filter(Boolean).join(' ').toLowerCase();
+		return hay.includes(q);
 	}
 
-	function renderTable() {
-		const list = filteredRecords();
-		const tbody = $('loanTableBody');
-		const empty = $('emptyState');
-
-		if (records.length === 0) {
-			tbody.innerHTML = '';
-			empty.style.display = 'block';
-			document.querySelector('.wrap-table table').style.display = 'none';
-			return;
-		}
-
-		empty.style.display = list.length === 0 ? 'block' : 'none';
-		document.querySelector('.wrap-table table').style.display = '';
-
-		if (list.length === 0) {
-			tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--gray);padding:24px">No records match your filters.</td></tr>';
-			return;
-		}
-
-		tbody.innerHTML = list.map((r) => {
-			const calc = getLoanCalc(r);
-			const paid = totalPaid(r);
-			const balance = Math.max(0, calc.payable - paid);
-			const status = getStatus(r);
-			return `<tr>
-				<td><strong>${escapeHtml(r.name)}</strong>${r.phone ? `<br><span style="font-size:0.78rem;color:var(--gray)">${escapeHtml(r.phone)}</span>` : ''}</td>
-				<td class="num">${formatMoney(r.principal)}</td>
-				<td class="num">${formatMoney(calc.payable)}</td>
-				<td class="num">${formatMoney(balance)}</td>
-				<td><span class="badge badge-${status}">${statusLabel(status)}</span></td>
-				<td class="actions">
-					<button type="button" class="btn btn-primary btn-sm" data-view="${r.id}">View</button>
-					<button type="button" class="btn btn-success btn-sm" data-repay="${r.id}">Repay</button>
-					<button type="button" class="btn btn-secondary btn-sm" data-edit="${r.id}">Edit</button>
-					<button type="button" class="btn btn-danger btn-sm" data-delete="${r.id}">Delete</button>
-				</td>
-			</tr>`;
-		}).join('');
-
+	function attachRowHandlers(tbody) {
+		tbody.querySelectorAll('[data-profile]').forEach((el) => {
+			el.addEventListener('click', (e) => {
+				e.preventDefault();
+				openProfileModal(el.getAttribute('data-profile'));
+			});
+		});
 		tbody.querySelectorAll('[data-view]').forEach((btn) => {
 			btn.addEventListener('click', () => openDetailModal(btn.getAttribute('data-view')));
 		});
@@ -791,14 +844,99 @@ body.is-busy .btn { pointer-events: none; opacity: 0.7; }
 		});
 	}
 
+	function renderTable() {
+		const q = ($('searchInput').value || '').trim().toLowerCase();
+		const status = $('statusFilter').value;
+		const list = records.filter((r) => !isSettled(r) && matchesSearch(r, q) && (!status || getStatus(r) === status));
+
+		const tbody = $('loanTableBody');
+		const empty = $('emptyState');
+		const table = tbody.closest('table');
+
+		if (list.length === 0) {
+			tbody.innerHTML = '';
+			empty.style.display = 'block';
+			table.style.display = 'none';
+			return;
+		}
+		empty.style.display = 'none';
+		table.style.display = '';
+
+		tbody.innerHTML = list.map((r) => {
+			const calc = getLoanCalc(r);
+			const balance = getBalance(r);
+			const status2 = getStatus(r);
+			return `<tr>
+				<td><strong><a class="name-link" data-profile="${r.id}">${escapeHtml(r.name)}</a></strong>${r.phone ? `<br><span style="font-size:0.78rem;color:var(--gray)">${escapeHtml(r.phone)}</span>` : ''}</td>
+				<td class="num">${formatMoney(r.principal)}</td>
+				<td class="num">${formatMoney(calc.payable)}</td>
+				<td class="num">${formatMoney(balance)}</td>
+				<td><span class="badge badge-${status2}">${statusLabel(status2)}</span></td>
+				<td class="actions">
+					<button type="button" class="btn btn-primary btn-sm" data-view="${r.id}">View</button>
+					<button type="button" class="btn btn-success btn-sm" data-repay="${r.id}">Repay</button>
+					<button type="button" class="btn btn-secondary btn-sm" data-edit="${r.id}">Edit</button>
+					<button type="button" class="btn btn-danger btn-sm" data-delete="${r.id}">Delete</button>
+				</td>
+			</tr>`;
+		}).join('');
+
+		attachRowHandlers(tbody);
+	}
+
+	function renderHistory() {
+		const q = ($('historySearch').value || '').trim().toLowerCase();
+		const status = $('historyStatusFilter').value;
+		const list = records.filter((r) => isSettled(r) && matchesSearch(r, q) && (!status || getStatus(r) === status));
+
+		const tbody = $('historyTableBody');
+		const empty = $('historyEmpty');
+		const table = tbody.closest('table');
+
+		if (list.length === 0) {
+			tbody.innerHTML = '';
+			empty.style.display = 'block';
+			table.style.display = 'none';
+			return;
+		}
+		empty.style.display = 'none';
+		table.style.display = '';
+
+		tbody.innerHTML = list.map((r) => {
+			const calc = getLoanCalc(r);
+			const paid = totalPaid(r);
+			const waived = getWaived(r);
+			const status2 = getStatus(r);
+			const settled = settledDate(r);
+			return `<tr>
+				<td><strong><a class="name-link" data-profile="${r.id}">${escapeHtml(r.name)}</a></strong>${r.phone ? `<br><span style="font-size:0.78rem;color:var(--gray)">${escapeHtml(r.phone)}</span>` : ''}</td>
+				<td class="num">${formatMoney(r.principal)}</td>
+				<td class="num">${formatMoney(calc.payable)}</td>
+				<td class="num">${formatMoney(paid)}</td>
+				<td class="num">${waived > 0.005 ? formatMoney(waived) : '—'}</td>
+				<td>${settled ? formatDate(settled) : '—'}</td>
+				<td><span class="badge badge-${status2}">${statusLabel(status2)}</span></td>
+				<td class="actions">
+					<button type="button" class="btn btn-primary btn-sm" data-view="${r.id}">View</button>
+					<button type="button" class="btn btn-danger btn-sm" data-delete="${r.id}">Delete</button>
+				</td>
+			</tr>`;
+		}).join('');
+
+		attachRowHandlers(tbody);
+	}
+
 	function openDetailModal(id) {
 		const r = records.find((x) => x.id === id);
 		if (!r) return;
 		const calc = getLoanCalc(r);
 		const paid = totalPaid(r);
-		const balance = Math.max(0, calc.payable - paid);
+		const balance = getBalance(r);
+		const waived = getWaived(r);
 		const status = getStatus(r);
 		const settled = settledDate(r);
+		const closed = isClosed(r);
+		const personLoanCount = relatedLoans(r).length;
 
 		const payments = [...(r.repayments || [])].sort((a, b) => (b.date || '').localeCompare(a.date || ''));
 		const historyRows = payments.length
@@ -814,7 +952,7 @@ body.is-busy .btn { pointer-events: none; opacity: 0.7; }
 			<div class="money-row">
 				<div class="money-card payable"><div class="m-label">Total payable</div><div class="m-value">${formatMoney(calc.payable)}</div></div>
 				<div class="money-card paid"><div class="m-label">Paid</div><div class="m-value">${formatMoney(paid)}</div></div>
-				<div class="money-card balance ${balance <= 0.005 ? 'zero' : ''}"><div class="m-label">Balance</div><div class="m-value">${formatMoney(balance)}</div></div>
+				<div class="money-card balance ${balance <= 0.005 ? 'zero' : ''}"><div class="m-label">${closed ? 'Balance (closed)' : 'Balance'}</div><div class="m-value">${formatMoney(balance)}</div></div>
 			</div>
 			<div class="detail-grid">
 				<div class="d-item accent-gray"><div class="d-label">Contact</div><div class="d-value">${escapeHtml(r.phone || '—')}</div></div>
@@ -822,8 +960,9 @@ body.is-busy .btn { pointer-events: none; opacity: 0.7; }
 				<div class="d-item accent-blue"><div class="d-label">Principal</div><div class="d-value">${formatMoney(r.principal)}</div></div>
 				<div class="d-item accent-orange"><div class="d-label">Interest (10%)</div><div class="d-value">${formatMoney(calc.interest)}</div></div>
 				<div class="d-item accent-gray"><div class="d-label">Start date</div><div class="d-value">${formatDate(r.startDate)}</div></div>
-				<div class="d-item accent-gray"><div class="d-label">Settled on</div><div class="d-value">${settled ? formatDate(settled) : 'Ongoing'}</div></div>
+				<div class="d-item accent-gray"><div class="d-label">${closed ? 'Closed on' : 'Settled on'}</div><div class="d-value">${settled ? formatDate(settled) : 'Ongoing'}</div></div>
 				<div class="d-item accent-gray"><div class="d-label">Duration</div><div class="d-value">${escapeHtml(calc.durationLabel)}</div></div>
+				${waived > 0.005 ? `<div class="d-item accent-orange"><div class="d-label">Waived</div><div class="d-value">${formatMoney(waived)}</div></div>` : ''}
 			</div>
 			${r.notes ? `<div class="detail-section-title">Notes</div><div style="font-size:0.9rem">${escapeHtml(r.notes)}</div>` : ''}
 			<div class="detail-section-title">Repayment history</div>
@@ -834,24 +973,154 @@ body.is-busy .btn { pointer-events: none; opacity: 0.7; }
 				</table>
 			</div>
 			<div class="btn-row">
-				<button type="button" class="btn btn-success btn-sm" id="detailRepayBtn">Record repayment</button>
+				${closed
+					? '<button type="button" class="btn btn-secondary btn-sm" id="detailReopenBtn">Reopen deal</button>'
+					: '<button type="button" class="btn btn-success btn-sm" id="detailRepayBtn">Record repayment</button>'
+						+ '<button type="button" class="btn btn-primary btn-sm" id="detailCloseBtn">Complete deal</button>'}
 				<button type="button" class="btn btn-secondary btn-sm" id="detailEditBtn">Edit</button>
+				${personLoanCount > 1 ? `<button type="button" class="btn btn-secondary btn-sm" id="detailProfileBtn">All loans by ${escapeHtml(r.name)} (${personLoanCount})</button>` : ''}
 			</div>`;
 
-		$('detailRepayBtn').addEventListener('click', () => {
-			closeDetailModal();
-			openRepayModal(id);
-		});
+		if (closed) {
+			$('detailReopenBtn').addEventListener('click', () => reopenDeal(id));
+		} else {
+			$('detailRepayBtn').addEventListener('click', () => {
+				closeDetailModal();
+				openRepayModal(id);
+			});
+			$('detailCloseBtn').addEventListener('click', () => completeDeal(id));
+		}
 		$('detailEditBtn').addEventListener('click', () => {
 			closeDetailModal();
 			startEdit(id);
 		});
+		if (personLoanCount > 1) {
+			$('detailProfileBtn').addEventListener('click', () => {
+				closeDetailModal();
+				openProfileModal(id);
+			});
+		}
 
 		$('detailModal').classList.add('show');
 	}
 
+	async function completeDeal(id) {
+		const r = records.find((x) => x.id === id);
+		if (!r) return;
+		const outstanding = getBalance(r);
+		const msg = outstanding > 0.005
+			? `Complete this deal now and waive the remaining balance of ${formatMoney(outstanding)}?\n\nInterest stops today and "${r.name}" will be marked as Closed.`
+			: `Mark this deal as complete now? "${r.name}" will be marked as Closed.`;
+		if (!confirm(msg)) return;
+		setBusy(true);
+		try {
+			await setLoanClosed(id, todayStr());
+			await loadRecords();
+			refresh();
+			closeDetailModal();
+			openDetailModal(id);
+		} catch (err) {
+			alert('Could not complete deal: ' + err.message);
+		} finally {
+			setBusy(false);
+		}
+	}
+
+	async function reopenDeal(id) {
+		const r = records.find((x) => x.id === id);
+		if (!r) return;
+		if (!confirm(`Reopen "${r.name}"? Interest will start accruing again from the start date up to today.`)) return;
+		setBusy(true);
+		try {
+			await setLoanClosed(id, null);
+			await loadRecords();
+			refresh();
+			closeDetailModal();
+			openDetailModal(id);
+		} catch (err) {
+			alert('Could not reopen deal: ' + err.message);
+		} finally {
+			setBusy(false);
+		}
+	}
+
 	function closeDetailModal() {
 		$('detailModal').classList.remove('show');
+	}
+
+	function openProfileModal(id) {
+		const ref = records.find((x) => x.id === id);
+		if (!ref) return;
+		const loans = relatedLoans(ref);
+
+		let totalBorrowed = 0;
+		let totalPayable = 0;
+		let totalPaidSum = 0;
+		let totalOutstanding = 0;
+		let totalWaived = 0;
+		let activeCount = 0;
+
+		const rowsHtml = loans.map((r) => {
+			const calc = getLoanCalc(r);
+			const paid = totalPaid(r);
+			const balance = getBalance(r);
+			const status = getStatus(r);
+			const settled = settledDate(r);
+			totalBorrowed += Number(r.principal) || 0;
+			totalPayable += calc.payable;
+			totalPaidSum += paid;
+			totalOutstanding += balance;
+			totalWaived += getWaived(r);
+			if (!isSettled(r)) activeCount += 1;
+			return `<tr>
+				<td>${formatDate(r.startDate)}</td>
+				<td class="num">${formatMoney(r.principal)}</td>
+				<td class="num">${formatMoney(calc.payable)}</td>
+				<td class="num">${formatMoney(paid)}</td>
+				<td class="num">${formatMoney(balance)}</td>
+				<td>${settled ? formatDate(settled) : 'Ongoing'}</td>
+				<td><span class="badge badge-${status}">${statusLabel(status)}</span></td>
+				<td class="actions"><button type="button" class="btn btn-primary btn-sm" data-view="${r.id}">View</button></td>
+			</tr>`;
+		}).join('');
+
+		const contact = loans.map((l) => (l.phone || '').trim()).find(Boolean) || '—';
+
+		$('profileTitle').textContent = ref.name;
+		$('profileBody').innerHTML = `
+			<div class="detail-grid">
+				<div class="d-item accent-gray"><div class="d-label">Contact</div><div class="d-value">${escapeHtml(contact)}</div></div>
+				<div class="d-item accent-blue"><div class="d-label">Loans</div><div class="d-value">${loans.length} total · ${activeCount} active</div></div>
+			</div>
+			<div class="money-row">
+				<div class="money-card payable"><div class="m-label">Total borrowed</div><div class="m-value">${formatMoney(totalBorrowed)}</div></div>
+				<div class="money-card paid"><div class="m-label">Total paid</div><div class="m-value">${formatMoney(totalPaidSum)}</div></div>
+				<div class="money-card balance ${totalOutstanding <= 0.005 ? 'zero' : ''}"><div class="m-label">Outstanding</div><div class="m-value">${formatMoney(totalOutstanding)}</div></div>
+			</div>
+			<div class="detail-grid">
+				<div class="d-item accent-blue"><div class="d-label">Total payable</div><div class="d-value">${formatMoney(totalPayable)}</div></div>
+				${totalWaived > 0.005 ? `<div class="d-item accent-orange"><div class="d-label">Total waived</div><div class="d-value">${formatMoney(totalWaived)}</div></div>` : ''}
+			</div>
+			<div class="detail-section-title">Loans (${loans.length})</div>
+			<div class="wrap-table">
+				<table class="main-table">
+					<thead><tr><th>Start</th><th class="num">Principal</th><th class="num">Payable</th><th class="num">Paid</th><th class="num">Balance</th><th>Completed on</th><th>Status</th><th></th></tr></thead>
+					<tbody>${rowsHtml}</tbody>
+				</table>
+			</div>`;
+
+		$('profileBody').querySelectorAll('[data-view]').forEach((btn) => {
+			btn.addEventListener('click', () => {
+				closeProfileModal();
+				openDetailModal(btn.getAttribute('data-view'));
+			});
+		});
+
+		$('profileModal').classList.add('show');
+	}
+
+	function closeProfileModal() {
+		$('profileModal').classList.remove('show');
 	}
 
 	function escapeHtml(s) {
@@ -865,6 +1134,7 @@ body.is-busy .btn { pointer-events: none; opacity: 0.7; }
 	function refresh() {
 		renderSummary();
 		renderTable();
+		renderHistory();
 	}
 
 	function validateFormData(data) {
@@ -1081,6 +1351,8 @@ body.is-busy .btn { pointer-events: none; opacity: 0.7; }
 	});
 	$('searchInput').addEventListener('input', renderTable);
 	$('statusFilter').addEventListener('change', renderTable);
+	$('historySearch').addEventListener('input', renderHistory);
+	$('historyStatusFilter').addEventListener('change', renderHistory);
 
 	document.querySelectorAll('.tab-btn').forEach((btn) => {
 		btn.addEventListener('click', () => switchTab(btn.getAttribute('data-tab')));
@@ -1095,6 +1367,11 @@ body.is-busy .btn { pointer-events: none; opacity: 0.7; }
 	$('closeDetailModal').addEventListener('click', closeDetailModal);
 	$('detailModal').addEventListener('click', (e) => {
 		if (e.target === $('detailModal')) closeDetailModal();
+	});
+
+	$('closeProfileModal').addEventListener('click', closeProfileModal);
+	$('profileModal').addEventListener('click', (e) => {
+		if (e.target === $('profileModal')) closeProfileModal();
 	});
 
 	$('closeRepayModal').addEventListener('click', closeRepayModal);

@@ -6,8 +6,10 @@ create table if not exists public.loans (
   phone text,
   principal numeric(14, 2) not null check (principal > 0),
   start_date date not null,
-  -- end_date is optional: the loan's "settled on" date is derived from the final
-  -- repayment. Interest accrues from start_date until the loan is fully paid.
+  -- end_date is optional. When set, it is the date the deal was manually closed
+  -- (remaining balance waived); interest stops on that date. When null, interest
+  -- accrues until the loan is fully paid (settled date is derived from the final
+  -- repayment) or up to today while still outstanding.
   end_date date check (end_date is null or end_date >= start_date),
   notes text,
   created_at timestamptz not null default now()
