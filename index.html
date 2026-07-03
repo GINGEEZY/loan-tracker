@@ -127,6 +127,25 @@ tr:hover td { background: #f9fafb; }
 
 .help-box { margin-top: 12px; padding: 12px 14px; background: #f8fafc; border-radius: 10px; border: 1px solid var(--border); font-size: 0.82rem; color: var(--gray); line-height: 1.5; }
 
+.tabs { display: flex; gap: 8px; margin-bottom: 20px; background: #fff; padding: 6px; border-radius: 12px; box-shadow: var(--shadow); border: 1px solid var(--border); }
+.tab-btn { flex: 1; padding: 12px 16px; border: none; background: transparent; border-radius: 9px; cursor: pointer; font-weight: 600; font-size: 0.95rem; color: var(--gray); font-family: inherit; transition: all 0.2s; }
+.tab-btn:hover { background: var(--gray-light); }
+.tab-btn.active { background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%); color: #fff; }
+.tab-panel { display: none; }
+.tab-panel.active { display: block; }
+
+.list-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 16px; flex-wrap: wrap; }
+.list-header h3 { margin: 0; font-size: 1.1rem; color: var(--primary); display: flex; align-items: center; gap: 8px; }
+.list-header h3::before { content: ''; width: 4px; height: 24px; background: var(--primary); border-radius: 2px; }
+
+.modal-content.modal-wide { max-width: 760px; }
+.wrap-table table.main-table { min-width: 640px; }
+
+.detail-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px 16px; margin: 4px 0 8px; }
+.detail-grid .d-label { font-size: 0.72rem; font-weight: 600; color: var(--gray); text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 2px; }
+.detail-grid .d-value { font-weight: 700; font-variant-numeric: tabular-nums; word-break: break-word; }
+.detail-section-title { font-size: 0.8rem; font-weight: 700; color: var(--gray); text-transform: uppercase; letter-spacing: 0.04em; margin: 14px 0 6px; }
+
 .db-banner { padding: 10px 14px; border-radius: 10px; margin-bottom: 16px; font-size: 0.88rem; text-align: center; }
 .db-banner.ok { background: var(--success-light); color: var(--success); border: 1px solid var(--success); }
 .db-banner.err { background: var(--danger-light); color: #991b1b; border: 1px solid var(--danger); }
@@ -142,9 +161,58 @@ body.is-busy .btn { pointer-events: none; opacity: 0.7; }
 
 	<div id="dbBanner" class="db-banner loading">Connecting to database…</div>
 
-	<div class="summary-grid" id="summaryGrid"></div>
+	<div class="tabs">
+		<button type="button" class="tab-btn active" data-tab="dashboard">Dashboard</button>
+		<button type="button" class="tab-btn" data-tab="borrowers">Borrowers</button>
+	</div>
 
-	<div class="card">
+	<section id="tab-dashboard" class="tab-panel active">
+		<div class="summary-grid" id="summaryGrid"></div>
+	</section>
+
+	<section id="tab-borrowers" class="tab-panel">
+		<div class="card">
+			<div class="list-header">
+				<h3>All borrowers</h3>
+				<button type="button" class="btn btn-primary" id="addBorrowerBtn">+ Add borrower</button>
+			</div>
+			<div class="filter-row">
+				<input type="search" id="searchInput" placeholder="Search by name, phone, or notes…">
+				<select id="statusFilter">
+					<option value="">All statuses</option>
+					<option value="paid">Paid in full</option>
+					<option value="partial">Partially paid</option>
+					<option value="pending">No payments yet</option>
+				</select>
+				<button type="button" class="btn btn-secondary btn-sm" id="exportBtn">Export JSON</button>
+				<button type="button" class="btn btn-secondary btn-sm" id="importLocalBtn" title="One-time import from old browser storage">Import browser data</button>
+			</div>
+			<div class="wrap-table">
+				<table class="main-table">
+					<thead>
+						<tr>
+							<th>Borrower</th>
+							<th class="num">Principal</th>
+							<th class="num">Total payable</th>
+							<th class="num">Balance</th>
+							<th>Status</th>
+							<th>Actions</th>
+						</tr>
+					</thead>
+					<tbody id="loanTableBody"></tbody>
+				</table>
+			</div>
+			<div class="empty-state" id="emptyState" style="display:none">
+				<strong>No borrowers yet</strong>
+				<p>Click "Add borrower" to create your first record.</p>
+			</div>
+		</div>
+	</section>
+</div>
+
+<div class="modal" id="loanModal" aria-hidden="true">
+	<div class="modal-content modal-wide">
+		<button type="button" class="modal-close" id="closeLoanModal" aria-label="Close">&times;</button>
 		<h3 id="formTitle">Add borrower</h3>
 		<form id="loanForm" autocomplete="off">
 			<input type="hidden" id="editId" value="">
@@ -181,7 +249,6 @@ body.is-busy .btn { pointer-events: none; opacity: 0.7; }
 			<p class="err-msg" id="formError"></p>
 			<div class="btn-row">
 				<button type="submit" class="btn btn-primary" id="submitBtn">Save borrower</button>
-				<button type="button" class="btn btn-secondary" id="cancelEditBtn" style="display:none">Cancel edit</button>
 				<button type="reset" class="btn btn-secondary" id="resetFormBtn">Clear form</button>
 			</div>
 			<div class="help-box">
@@ -192,45 +259,13 @@ body.is-busy .btn { pointer-events: none; opacity: 0.7; }
 			</div>
 		</form>
 	</div>
+</div>
 
-	<div class="card">
-		<h3>All borrowers</h3>
-		<div class="filter-row">
-			<input type="search" id="searchInput" placeholder="Search by name, phone, or notes…">
-			<select id="statusFilter">
-				<option value="">All statuses</option>
-				<option value="paid">Paid in full</option>
-				<option value="partial">Partially paid</option>
-				<option value="pending">No payments yet</option>
-			</select>
-			<button type="button" class="btn btn-secondary btn-sm" id="exportBtn">Export JSON</button>
-			<button type="button" class="btn btn-secondary btn-sm" id="importLocalBtn" title="One-time import from old browser storage">Import browser data</button>
-		</div>
-		<div class="wrap-table">
-			<table>
-				<thead>
-					<tr>
-						<th>Borrower</th>
-						<th>Contact</th>
-						<th class="num">Principal</th>
-						<th>Start</th>
-						<th>Settled on</th>
-						<th>Duration</th>
-						<th class="num">Interest (10%)</th>
-						<th class="num">Total payable</th>
-						<th class="num">Paid</th>
-						<th class="num">Balance</th>
-						<th>Status</th>
-						<th>Actions</th>
-					</tr>
-				</thead>
-				<tbody id="loanTableBody"></tbody>
-			</table>
-		</div>
-		<div class="empty-state" id="emptyState" style="display:none">
-			<strong>No borrowers yet</strong>
-			<p>Add a borrower using the form above.</p>
-		</div>
+<div class="modal" id="detailModal" aria-hidden="true">
+	<div class="modal-content">
+		<button type="button" class="modal-close" id="closeDetailModal" aria-label="Close">&times;</button>
+		<h3 id="detailTitle">Borrower details</h3>
+		<div id="detailBody"></div>
 	</div>
 </div>
 
@@ -617,9 +652,27 @@ body.is-busy .btn { pointer-events: none; opacity: 0.7; }
 		$('editId').value = '';
 		$('formTitle').textContent = 'Add borrower';
 		$('submitBtn').textContent = 'Save borrower';
-		$('cancelEditBtn').style.display = 'none';
 		showFormError('');
 		updateFormPreview();
+	}
+
+	function openLoanModal() {
+		resetForm();
+		$('loanModal').classList.add('show');
+		setTimeout(() => $('borrowerName').focus(), 50);
+	}
+
+	function closeLoanModal() {
+		$('loanModal').classList.remove('show');
+	}
+
+	function switchTab(name) {
+		document.querySelectorAll('.tab-btn').forEach((b) => {
+			b.classList.toggle('active', b.getAttribute('data-tab') === name);
+		});
+		document.querySelectorAll('.tab-panel').forEach((p) => {
+			p.classList.toggle('active', p.id === 'tab-' + name);
+		});
 	}
 
 	function renderSummary() {
@@ -684,7 +737,7 @@ body.is-busy .btn { pointer-events: none; opacity: 0.7; }
 		document.querySelector('.wrap-table table').style.display = '';
 
 		if (list.length === 0) {
-			tbody.innerHTML = '<tr><td colspan="12" style="text-align:center;color:var(--gray);padding:24px">No records match your filters.</td></tr>';
+			tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--gray);padding:24px">No records match your filters.</td></tr>';
 			return;
 		}
 
@@ -693,20 +746,14 @@ body.is-busy .btn { pointer-events: none; opacity: 0.7; }
 			const paid = totalPaid(r);
 			const balance = Math.max(0, calc.payable - paid);
 			const status = getStatus(r);
-			const settled = settledDate(r);
 			return `<tr>
-				<td><strong>${escapeHtml(r.name)}</strong>${r.notes ? `<br><span style="font-size:0.78rem;color:var(--gray)">${escapeHtml(r.notes)}</span>` : ''}</td>
-				<td>${escapeHtml(r.phone || '—')}</td>
+				<td><strong>${escapeHtml(r.name)}</strong>${r.phone ? `<br><span style="font-size:0.78rem;color:var(--gray)">${escapeHtml(r.phone)}</span>` : ''}</td>
 				<td class="num">${formatMoney(r.principal)}</td>
-				<td>${formatDate(r.startDate)}</td>
-				<td>${settled ? formatDate(settled) : '<span style="color:var(--gray)">Ongoing</span>'}</td>
-				<td>${escapeHtml(calc.durationLabel)}<br><span style="font-size:0.75rem;color:var(--gray)">${calc.interestMonths.toFixed(2)} mo @ 10%</span></td>
-				<td class="num">${formatMoney(calc.interest)}</td>
 				<td class="num">${formatMoney(calc.payable)}</td>
-				<td class="num">${formatMoney(paid)}</td>
 				<td class="num">${formatMoney(balance)}</td>
 				<td><span class="badge badge-${status}">${statusLabel(status)}</span></td>
 				<td class="actions">
+					<button type="button" class="btn btn-primary btn-sm" data-view="${r.id}">View</button>
 					<button type="button" class="btn btn-success btn-sm" data-repay="${r.id}">Repay</button>
 					<button type="button" class="btn btn-secondary btn-sm" data-edit="${r.id}">Edit</button>
 					<button type="button" class="btn btn-danger btn-sm" data-delete="${r.id}">Delete</button>
@@ -714,6 +761,9 @@ body.is-busy .btn { pointer-events: none; opacity: 0.7; }
 			</tr>`;
 		}).join('');
 
+		tbody.querySelectorAll('[data-view]').forEach((btn) => {
+			btn.addEventListener('click', () => openDetailModal(btn.getAttribute('data-view')));
+		});
 		tbody.querySelectorAll('[data-repay]').forEach((btn) => {
 			btn.addEventListener('click', () => openRepayModal(btn.getAttribute('data-repay')));
 		});
@@ -723,6 +773,67 @@ body.is-busy .btn { pointer-events: none; opacity: 0.7; }
 		tbody.querySelectorAll('[data-delete]').forEach((btn) => {
 			btn.addEventListener('click', () => deleteRecord(btn.getAttribute('data-delete')));
 		});
+	}
+
+	function openDetailModal(id) {
+		const r = records.find((x) => x.id === id);
+		if (!r) return;
+		const calc = getLoanCalc(r);
+		const paid = totalPaid(r);
+		const balance = Math.max(0, calc.payable - paid);
+		const status = getStatus(r);
+		const settled = settledDate(r);
+
+		const payments = [...(r.repayments || [])].sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+		const historyRows = payments.length
+			? payments.map((p) => `<tr>
+					<td>${formatDate(p.date)}</td>
+					<td class="num">${formatMoney(p.amount)}</td>
+					<td>${escapeHtml(p.note || '—')}</td>
+				</tr>`).join('')
+			: '<tr><td colspan="3" style="text-align:center;color:var(--gray);padding:14px">No payments yet.</td></tr>';
+
+		$('detailTitle').textContent = r.name;
+		$('detailBody').innerHTML = `
+			<div class="detail-grid">
+				<div><div class="d-label">Contact</div><div class="d-value">${escapeHtml(r.phone || '—')}</div></div>
+				<div><div class="d-label">Status</div><div class="d-value"><span class="badge badge-${status}">${statusLabel(status)}</span></div></div>
+				<div><div class="d-label">Principal</div><div class="d-value">${formatMoney(r.principal)}</div></div>
+				<div><div class="d-label">Start date</div><div class="d-value">${formatDate(r.startDate)}</div></div>
+				<div><div class="d-label">Settled on</div><div class="d-value">${settled ? formatDate(settled) : 'Ongoing'}</div></div>
+				<div><div class="d-label">Duration</div><div class="d-value">${escapeHtml(calc.durationLabel)}</div></div>
+				<div><div class="d-label">Interest (10%)</div><div class="d-value">${formatMoney(calc.interest)}</div></div>
+				<div><div class="d-label">Total payable</div><div class="d-value">${formatMoney(calc.payable)}</div></div>
+				<div><div class="d-label">Paid</div><div class="d-value">${formatMoney(paid)}</div></div>
+				<div><div class="d-label">Balance</div><div class="d-value">${formatMoney(balance)}</div></div>
+			</div>
+			${r.notes ? `<div class="detail-section-title">Notes</div><div style="font-size:0.9rem">${escapeHtml(r.notes)}</div>` : ''}
+			<div class="detail-section-title">Repayment history</div>
+			<div class="repay-history" style="display:block">
+				<table>
+					<thead><tr><th>Date</th><th class="num">Amount</th><th>Note</th></tr></thead>
+					<tbody>${historyRows}</tbody>
+				</table>
+			</div>
+			<div class="btn-row">
+				<button type="button" class="btn btn-success btn-sm" id="detailRepayBtn">Record repayment</button>
+				<button type="button" class="btn btn-secondary btn-sm" id="detailEditBtn">Edit</button>
+			</div>`;
+
+		$('detailRepayBtn').addEventListener('click', () => {
+			closeDetailModal();
+			openRepayModal(id);
+		});
+		$('detailEditBtn').addEventListener('click', () => {
+			closeDetailModal();
+			startEdit(id);
+		});
+
+		$('detailModal').classList.add('show');
+	}
+
+	function closeDetailModal() {
+		$('detailModal').classList.remove('show');
 	}
 
 	function escapeHtml(s) {
@@ -758,6 +869,7 @@ body.is-busy .btn { pointer-events: none; opacity: 0.7; }
 	function startEdit(id) {
 		const r = records.find((x) => x.id === id);
 		if (!r) return;
+		resetForm();
 		$('editId').value = r.id;
 		$('borrowerName').value = r.name;
 		$('borrowerPhone').value = r.phone || '';
@@ -766,10 +878,9 @@ body.is-busy .btn { pointer-events: none; opacity: 0.7; }
 		$('notes').value = r.notes || '';
 		$('formTitle').textContent = 'Edit borrower';
 		$('submitBtn').textContent = 'Update borrower';
-		$('cancelEditBtn').style.display = '';
 		showFormError('');
 		updateFormPreview();
-		window.scrollTo({ top: 0, behavior: 'smooth' });
+		$('loanModal').classList.add('show');
 	}
 
 	async function deleteRecord(id) {
@@ -920,6 +1031,7 @@ body.is-busy .btn { pointer-events: none; opacity: 0.7; }
 				await createLoan(data);
 			}
 			resetForm();
+			closeLoanModal();
 			await loadRecords();
 			refresh();
 		} catch (apiErr) {
@@ -946,12 +1058,26 @@ body.is-busy .btn { pointer-events: none; opacity: 0.7; }
 		}
 	});
 
-	$('cancelEditBtn').addEventListener('click', resetForm);
 	$('resetFormBtn').addEventListener('click', () => {
 		setTimeout(resetForm, 0);
 	});
 	$('searchInput').addEventListener('input', renderTable);
 	$('statusFilter').addEventListener('change', renderTable);
+
+	document.querySelectorAll('.tab-btn').forEach((btn) => {
+		btn.addEventListener('click', () => switchTab(btn.getAttribute('data-tab')));
+	});
+
+	$('addBorrowerBtn').addEventListener('click', openLoanModal);
+	$('closeLoanModal').addEventListener('click', closeLoanModal);
+	$('loanModal').addEventListener('click', (e) => {
+		if (e.target === $('loanModal')) closeLoanModal();
+	});
+
+	$('closeDetailModal').addEventListener('click', closeDetailModal);
+	$('detailModal').addEventListener('click', (e) => {
+		if (e.target === $('detailModal')) closeDetailModal();
+	});
 
 	$('closeRepayModal').addEventListener('click', closeRepayModal);
 	$('repayModal').addEventListener('click', (e) => {
